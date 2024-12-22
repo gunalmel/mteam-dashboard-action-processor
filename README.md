@@ -16,7 +16,12 @@ head -n 682 timeline-multiplayer-09182024.csv | tail -n1
 
 ## Code Coverage
 
+```shell
 rustup component add llvm-tools-preview # needed for grcov
 cargo install grcov
-CARGO_INCREMENTAL=0 RUSTFLAGS='-Cinstrument-coverage' LLVM_PROFILE_FILE='cargo-test-%p-%m.profraw' cargo test
-grcov . --binary-path ./target/debug/deps/ -s . -t html --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o target/coverage/html --llvm-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/bin
+CARGO_INCREMENTAL=0 RUSTFLAGS='-Cinstrument-coverage' LLVM_PROFILE_FILE='target/coverage-raw/cargo-test-%p-%m.profraw' cargo test
+grcov target/coverage-raw --binary-path ./target/debug/deps/ -s . -t html --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o target/coverage/html --llvm-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/bin
+# if the xcode llvm-profdata is not compatible with grcov then use the following 
+brew install llvm
+grcov target/coverage-raw --binary-path ./target/debug/deps/ -s . -t html --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o target/coverage/html --llvm-path /usr/local/opt/llvm/bin
+```

@@ -85,20 +85,10 @@ pub fn validate_csv_header<R: Read>(reader: &mut Reader<R>) -> Result<(), String
 
 #[cfg(test)]
 mod tests_is_header_valid {
-    fn assert_header_check(
-        headers: &[&str],
-        actual: Result<(), String>,
-        expected_headers: &[&str],
-    ) {
+    fn assert_header_check(headers: &[&str], actual: Result<(), String>, expected_headers: &[&str]) {
         assert!(actual.is_err());
         let message: String = actual.unwrap_err();
-        assert_eq!(
-            message,
-            format!(
-                "Line {:?}: expected {:?} as the header row of csv but got {:?}",
-                1, expected_headers, headers
-            )
-        );
+        assert_eq!(message, format!("Line {:?}: expected {:?} as the header row of csv but got {:?}", 1, expected_headers, headers));
     }
 
     mod invalid_header_tests {
@@ -236,9 +226,7 @@ mod tests_apply_validation {
     #[test]
     fn test_could_not_read_headers() {
         let mut csv_reader = Reader::from_reader(ErrorReader);
-        let mock_validate = |_: &[&str], _: &[&str]| -> Result<(), String> {
-            Ok(())
-        };
+        let mock_validate = |_: &[&str], _: &[&str]| -> Result<(), String> { unreachable!() };
 
         let result = apply_validation(&mut csv_reader, mock_validate);
 
