@@ -1,84 +1,139 @@
-//tutorial-read-01.rs
+use csv::Reader;
 use std::{
-    env,
     error::Error,
-    ffi::OsString,
     fs::File,
-    process,
+    io::{self, BufReader, Read},
 };
-// This lets us write `#[derive(Deserialize)]`.
-use serde::Deserialize;
+mod action_csv_row;
+mod debug_message;
 
-// We don't need to derive `Debug` (which doesn't require Serde), but it's a
-// good habit to do it for all your types.
-//
-// Notice that the field names in this struct are NOT in the same order as
-// the fields in the CSV data!
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "PascalCase")] //interpret each field in PascalCase, where the first letter of the field is capitalized
-struct ActionRecord {
-    #[serde(rename = "Time Stamp[Hr:Min:Sec]")]
-    timestamp: String,
-    #[serde(rename = "Action/Vital Name")]
-    action_name: Option<String>,
-    #[serde(rename = "SubAction Time[Min:Sec]")]
-    subaction_time: Option<String>,
-    #[serde(rename = "SubAction Name")]
-    subaction_name: Option<String>,
-    #[serde(rename = "Score")]
-    score: Option<String>,
-    #[serde(rename = "Old Value")]
-    old_value: Option<String>,
-    #[serde(rename = "New Value")]
-    new_value: Option<String>,
-    #[serde(deserialize_with = "csv::invalid_option")]
-    username: Option<String>,
-    #[serde(rename = "Speech Command", deserialize_with = "csv::invalid_option")]
-    // #[serde(deserialize_with = "csv::invalid_option")]
-    speech_command: Option<String>
+use crate::action_csv_row::validate_csv_header;
+use action_csv_row::ActionCsvRow;
+use debug_message::print_debug_message;
+
+fn read_csv_file_from_input() -> String {
+    println!("Enter the CSV file name:");
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    input.trim().to_string()
 }
 
-fn run() -> Result<(), Box<dyn Error>> {
-    let file_path = get_first_arg()?;
-    let file = File::open(file_path)?;
-    let mut rdr = csv::ReaderBuilder::new()
+fn process_csv<R: Read>(reader: R) -> Result<Vec<String>, Box<dyn Error>> {
+    let mut rdr = build_csv_reader(reader);
+    let mut errors: Vec<String> = Vec::new();
+
+    if let Err(e) = validate_csv_header(&mut rdr) {
+        errors.push(e);
+        print_debug_message!("Header parsing errors are pushed to errors vector: {:?}", errors);
+    }
+
+    for (row_index, result) in rdr.records().enumerate() {
+        let line_number = row_index + 2; // 0-based index with the first line being header
+        match result {
+            Ok(raw_row) => match raw_row.deserialize(None) {
+                Ok(record) => {
+                    let record: ActionCsvRow = record;
+                    // println!("{:#?}", record);
+                }
+                Err(e) => {
+                    errors.push(format!(
+                        "Line {}: could not deserialize row {}, error: {}",
+                        line_number,
+                        raw_row.iter().collect::<Vec<_>>().join(","),
+                        e.to_string()
+                    ));
+                }
+            },
+            Err(e) => {
+                errors.push(format!(
+                    "Line {}: could not parse row so no data to show, error: {}",
+                    line_number,
+                    e.to_string()
+                ));
+            }
+        }
+    }
+
+    print_debug_message!("The errors vector: {:#?}", errors);
+    Ok(errors)
+}
+
+fn build_csv_reader<R: Read>(reader: R) -> Reader<R> {
+    csv::ReaderBuilder::new()
         .has_headers(true)
         .flexible(true)
-        .from_reader(file);
-    {
-        // We nest this call in its own scope because of lifetimes.
-        let headers = rdr.headers()?;
-        println!("{:?}", headers);
-    }
-    // for result in rdr.records() {
-    //     let record = result?;
-    //     println!("{:?}", record);
-    // }
-    for result in rdr.deserialize() {
-        let record: ActionRecord = result?;
-        // println!("{:?}", record);
-        // Try this if you don't like each record smushed on one line:
-        println!("{:#?}", record);
-    }
-    // // We can ask for the headers at any time. There's no need to nest this
-    // // call in its own scope because we never try to borrow the reader again.
-    // let headers = rdr.headers()?;
-    // println!("{:?}", headers);
-    Ok(())
-}
-
-/// Returns the first positional argument sent to this process. If there are no
-/// positional arguments, then this returns an error.
-fn get_first_arg() -> Result<OsString, Box<dyn Error>> {
-    match env::args_os().nth(1) {
-        None => Err(From::from("expected 1 argument, but got none")),
-        Some(file_path) => Ok(file_path),
-    }
+        .from_reader(reader)
 }
 
 fn main() {
-    if let Err(err) = run() {
-        println!("{}", err);
-        process::exit(1);
+    let file_name = read_csv_file_from_input();
+
+    match File::open(file_name) {
+        Ok(file) => {
+            let buffered = BufReader::new(file);
+            if let Err(e) = process_csv(buffered) {
+                eprintln!("Error processing CSV: {}", e);
+            }
+        }
+        Err(e) => eprintln!("Error opening file: {}", e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_process_csv_with_valid_input() {
+        let data = "Time Stamp[Hr:Min:Sec],Action/Vital Name,SubAction Time[Min:Sec],SubAction Name,Score,Old Value,New Value,Username,Speech Command\n\
+                12:00:00,Action1,02:30,SubAction1,10,Old1,User1,New1,User1,Command1\n";
+        let cursor = Cursor::new(data);
+
+        let result = process_csv(cursor);
+        assert!(result.is_ok(), "Expected process_csv to succeed for valid input");
+
+        let errors = result.unwrap();
+        assert!(errors.is_empty(), "Expected no errors for valid input");
+    }
+
+    #[test]
+    fn test_process_csv_with_invalid_input() {
+        let data = "Time Stamp[Hr:Min:Sec],Action/Vital Name,SubAction Time[Min:Sec],SubAction Name,Score,Old Value,New Value,Username,Speech Command\n\
+                ,Action1,invalid_time,SubAction1,10,Old1,New1,User1,Command1\n";
+        let cursor = Cursor::new(data);
+
+        let result = process_csv(cursor);
+        assert!(result.is_ok(), "Expected process_csv to succeed even with invalid rows");
+
+        let errors = result.unwrap();
+        assert_eq!(errors.len(), 1, "Expected one error for invalid input");
+        assert!(errors[0].contains("Line 2: could not deserialize row ,Action1,invalid_time,"), "The only error should be on the second line");
+    }
+
+    #[test]
+    fn test_process_csv_with_empty_input() {
+        let data = "";
+        let cursor = Cursor::new(data);
+
+        let result = process_csv(cursor);
+        assert!(result.is_ok(), "Expected process_csv to succeed for empty input");
+
+        let errors = result.unwrap();
+        assert!(errors[0].contains("Line 1: expected [\"Time Stamp[Hr:Min:Sec]\""), "Expected error for missing header");
+    }
+
+    #[test]
+    fn test_process_csv_with_mixed_input() {
+        let data = "Time Stamp[Hr:Min:Sec],Action/Vital Name,SubAction Time[Min:Sec],SubAction Name,Score,Old Value,New Value,Username,Speech Command\n\
+                12:00:00,Action1,02:30,SubAction1,10,Old1,User1,New1,User1,Command1\n\
+                12:30:00,Action2,invalid_time,SubAction2,20,Old2,User2,New2,User2,Command2\n";
+        let cursor = Cursor::new(data);
+
+        let result = process_csv(cursor);
+        assert!(result.is_ok(), "Expected process_csv to succeed for mixed input");
+
+        let errors = result.unwrap();
+        assert!(errors.is_empty(), "Expected two errors for mixed input");
     }
 }
