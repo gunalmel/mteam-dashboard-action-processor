@@ -50,7 +50,8 @@ pub(crate) struct ActionCsvRow {
     speech_command: Option<String>,
 }
 
-pub fn is_header_valid(headers: &[&str], expected_headers: &[&str]) -> Result<(), String> {
+type HeaderValidatorType = fn(&[&str], &[&str]) -> Result<(), String>;
+fn validate_header(headers: &[&str], expected_headers: &[&str]) -> Result<(), String> {
     let mut headers_iter = headers.iter().map(|h| h.to_lowercase());
     let mut expected_iter = expected_headers.iter().map(|h| h.to_lowercase());
 
@@ -65,7 +66,7 @@ pub fn is_header_valid(headers: &[&str], expected_headers: &[&str]) -> Result<()
     }
 }
 
-fn apply_validation<R: Read>(reader: &mut Reader<R>, validate: impl Fn(&[&str], &[&str]) -> Result<(), String>) -> Result<(), String> {
+fn apply_validation<R: Read>(reader: &mut Reader<R>, validate: HeaderValidatorType) -> Result<(), String> {
     match reader.headers() {
         Ok(headers) => {
             let headers = headers.iter().collect::<Vec<_>>();
@@ -75,16 +76,16 @@ fn apply_validation<R: Read>(reader: &mut Reader<R>, validate: impl Fn(&[&str], 
     }
 }
 
-fn build_csv_header_validator<R: Read>(validate: impl Fn(&[&str], &[&str]) -> Result<(), String>) -> impl Fn(Box<&mut Reader<R>>) -> Result<(), String> {
-    move |mut reader| apply_validation(reader.as_mut(), &validate)
+fn build_csv_header_validator<R: Read>(validate: HeaderValidatorType) -> impl Fn(Box<&mut Reader<R>>) -> Result<(), String> {
+    move |mut reader| apply_validation(reader.as_mut(), validate)
 }
 
 pub fn validate_csv_header<R: Read>(reader: &mut Reader<R>) -> Result<(), String> {
-    build_csv_header_validator(is_header_valid)(Box::new(reader))
+    build_csv_header_validator(validate_header)(Box::new(reader))
 }
 
 #[cfg(test)]
-mod tests_is_header_valid {
+mod tests {
     fn assert_header_check(headers: &[&str], actual: Result<(), String>, expected_headers: &[&str]) {
         assert!(actual.is_err());
         let message: String = actual.unwrap_err();
@@ -92,8 +93,8 @@ mod tests_is_header_valid {
     }
 
     mod invalid_header_tests {
-        use crate::action_csv_row::is_header_valid;
-        use crate::action_csv_row::tests_is_header_valid::assert_header_check;
+        use crate::action_csv_row::validate_header;
+        use crate::action_csv_row::tests::assert_header_check;
 
         #[test]
         fn test_check_headers_missing_header() {
@@ -102,7 +103,7 @@ mod tests_is_header_valid {
 
             assert_header_check(
                 &headers,
-                is_header_valid(&headers, &expected_headers),
+                validate_header(&headers, &expected_headers),
                 &expected_headers,
             );
         }
@@ -122,7 +123,7 @@ mod tests_is_header_valid {
 
             assert_header_check(
                 &headers,
-                is_header_valid(&headers, &expected_headers),
+                validate_header(&headers, &expected_headers),
                 &expected_headers,
             );
         }
@@ -143,14 +144,14 @@ mod tests_is_header_valid {
 
             assert_header_check(
                 &headers,
-                is_header_valid(&headers, &expected_headers),
+                validate_header(&headers, &expected_headers),
                 &expected_headers,
             );
         }
     }
 
     mod valid_header_tests {
-        use crate::action_csv_row::is_header_valid;
+        use crate::action_csv_row::validate_header;
 
         #[test]
         fn test_check_headers_matching() {
@@ -165,7 +166,7 @@ mod tests_is_header_valid {
                 "SubAction Time[Min:Sec]",
             ];
 
-            assert!(is_header_valid(&headers, &expected_headers).is_ok());
+            assert!(validate_header(&headers, &expected_headers).is_ok());
         }
 
         #[test]
@@ -181,7 +182,7 @@ mod tests_is_header_valid {
                 "SubAction Time[Min:Sec]",
             ];
 
-            assert!(is_header_valid(&headers, &expected_headers).is_ok());
+            assert!(validate_header(&headers, &expected_headers).is_ok());
         }
 
         #[test]
@@ -198,64 +199,64 @@ mod tests_is_header_valid {
                 "SubAction Time[Min:Sec]",
             ];
 
-            assert!(is_header_valid(&headers, &expected_headers).is_ok());
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests_apply_validation {
-    use super::*;
-    use std::io::{self, Read};
-
-    // Custom reader that always returns an error
-    struct ValidReader;
-    impl Read for ValidReader {
-        fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
-            Ok(0)
-        }
-    }
-    struct ErrorReader;
-
-    impl Read for ErrorReader {
-        fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
-            Err(io::Error::new(io::ErrorKind::Other, "Simulated read error"))
+            assert!(validate_header(&headers, &expected_headers).is_ok());
         }
     }
 
-    #[test]
-    fn test_could_not_read_headers() {
-        let mut csv_reader = Reader::from_reader(ErrorReader);
-        let mock_validate = |_: &[&str], _: &[&str]| -> Result<(), String> { unreachable!() };
+    mod tests_apply_validation {
+        use std::io::{self, Read};
+        use csv::Reader;
+        use crate::action_csv_row::apply_validation;
 
-        let result = apply_validation(&mut csv_reader, mock_validate);
+        // Custom reader that always returns an error
+        struct ValidReader;
+        impl Read for ValidReader {
+            fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+                Ok(0)
+            }
+        }
+        struct ErrorReader;
 
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Simulated read error");
-    }
+        impl Read for ErrorReader {
+            fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+                Err(io::Error::new(io::ErrorKind::Other, "Simulated read error"))
+            }
+        }
 
-    #[test]
-    fn test_read_invalid_headers() {
-        let mut csv_reader = Reader::from_reader(ValidReader);
-        let mock_validate = |_: &[&str], _: &[&str]| -> Result<(), String> {
-            Err("Validation error".to_string())
-        };
+        #[test]
+        fn test_could_not_read_headers() {
+            let mut csv_reader = Reader::from_reader(ErrorReader);
+            let mock_validate = |_: &[&str], _: &[&str]| -> Result<(), String> { unreachable!() };
 
-        let result = apply_validation(&mut csv_reader, mock_validate);
+            let result = apply_validation(&mut csv_reader, mock_validate);
 
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Validation error");
-    }
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err(), "Simulated read error");
+        }
 
-    #[test]
-    fn test_read_valid_headers() {
-        let mut csv_reader = Reader::from_reader(ValidReader);
-        let mock_validate = |_: &[&str], _: &[&str]| -> Result<(), String> {
-            Ok(())
-        };
+        #[test]
+        fn test_read_invalid_headers() {
+            let mut csv_reader = Reader::from_reader(ValidReader);
+            let mock_validate = |_: &[&str], _: &[&str]| -> Result<(), String> {
+                Err("Validation error".to_string())
+            };
 
-        let result = apply_validation(&mut csv_reader, mock_validate);
+            let result = apply_validation(&mut csv_reader, mock_validate);
 
-        assert!(result.is_ok());
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err(), "Validation error");
+        }
+
+        #[test]
+        fn test_read_valid_headers() {
+            let mut csv_reader = Reader::from_reader(ValidReader);
+            let mock_validate = |_: &[&str], _: &[&str]| -> Result<(), String> {
+                Ok(())
+            };
+
+            let result = apply_validation(&mut csv_reader, mock_validate);
+
+            assert!(result.is_ok());
+        }
     }
 }
