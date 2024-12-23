@@ -1,12 +1,14 @@
 use csv::Reader;
 use std::{
-    error::Error,
     fs::File,
     io::{self, BufReader, Read},
 };
+use std::collections::VecDeque;
+use std::time::Duration;
+use chrono::{NaiveTime, TimeDelta};
+
 mod action_csv_row;
 mod debug_message;
-
 use crate::action_csv_row::validate_csv_header;
 use action_csv_row::ActionCsvRow;
 use debug_message::print_debug_message;
@@ -18,7 +20,41 @@ fn read_csv_file_from_input() -> String {
     input.trim().to_string()
 }
 
-fn process_csv<R: Read>(reader: R) -> Result<Vec<String>, Box<dyn Error>> {
+fn build_csv_reader<R: Read>(reader: R) -> Reader<R> {
+    csv::ReaderBuilder::new()
+        .has_headers(true)
+        .flexible(true)
+        .from_reader(reader)
+}
+
+
+#[derive(Debug)]
+struct ErrorPoint {
+    timestamp: NaiveTime,
+    action_rule: String,
+    violation: String,
+    advice: String,
+}
+
+#[derive(Debug)]
+struct ActionPoint {
+    timestamp: NaiveTime
+}
+
+#[derive(Debug)]
+enum ActionPlotPoint {
+    Error(ErrorPoint),
+    Action(ActionPoint),
+}
+
+fn stream_csv_with_errors<R>(
+    reader: R,
+    memory_size: usize,
+    max_time_diff_std: Duration,
+) -> impl Iterator<Item = Result<ActionPlotPoint, String>>
+where
+    R: Read,
+{
     let mut rdr = build_csv_reader(reader);
     let mut errors: Vec<String> = Vec::new();
 
@@ -26,43 +62,75 @@ fn process_csv<R: Read>(reader: R) -> Result<Vec<String>, Box<dyn Error>> {
         errors.push(e);
         print_debug_message!("Header parsing errors are pushed to errors vector: {:?}", errors);
     }
-
-    for (row_index, result) in rdr.records().enumerate() {
-        let line_number = row_index + 2; // 0-based index with the first line being header
+    let mut buffer: VecDeque<ActionCsvRow> = VecDeque::new();
+    let records = rdr.into_records().map(move |result| {
         match result {
-            Ok(raw_row) => match raw_row.deserialize(None) {
-                Ok(record) => {
-                    let record: ActionCsvRow = record;
-                    // println!("{:#?}", record);
+            Ok(raw_row) => {
+                let mut record: ActionCsvRow = raw_row.deserialize(None).map_err(|e| format!("Could not deserialize row, error: {}", e))?;
+                record.post_deserialize();
+                // No need to clone here, we own the record now
+
+                buffer.push_back(record.clone());
+
+                if buffer.len() > memory_size {
+                    buffer.pop_front();
                 }
-                Err(e) => {
-                    errors.push(format!(
-                        "Line {}: could not deserialize row {}, error: {}",
-                        line_number,
-                        raw_row.iter().collect::<Vec<_>>().join(","),
-                        e.to_string()
-                    ));
+                // Convert StdDuration to TimeDelta *once*, outside the loop
+                let max_time_diff = TimeDelta::from_std(max_time_diff_std).map_err(|e| format!("Invalid max_time_diff: {}", e))?;
+                if record.error_trigger {
+                    process_error_row(&record, &buffer, max_time_diff).ok_or("No matching action row found within time range".to_string())
+                } else {
+                    Ok(ActionPlotPoint::Action(ActionPoint {
+                        timestamp: parse_time(&record.timestamp).unwrap_or_default()
+                    }))
                 }
-            },
-            Err(e) => {
-                errors.push(format!(
-                    "Line {}: could not parse row so no data to show, error: {}",
-                    line_number,
-                    e.to_string()
-                ));
+            }
+            Err(e) => Err(format!("Could not parse row, error: {}", e)),
+        }
+    });
+
+    records
+}
+
+fn process_error_row(error_row: &ActionCsvRow, buffer: &VecDeque<ActionCsvRow>, max_time_diff: TimeDelta) -> Option<ActionPlotPoint> {
+    let error_time = parse_time(&error_row.timestamp)?;
+    let mut closest_action: Option<(&ActionCsvRow, TimeDelta)> = None;
+
+    for action_row in buffer {
+        if action_row.action_vital_name == error_row.username {
+            let action_time = parse_time(&action_row.timestamp)?;
+
+            // Calculate the difference as a ChronoDuration
+            let time_diff_chrono = if action_time > error_time {
+                action_time - error_time
+            } else {
+                error_time - action_time
+            };
+
+            // Convert ChronoDuration to std::time::Duration
+            let time_diff_std = time_diff_chrono.to_std().ok()?;
+
+            // Convert std::time::Duration to TimeDelta
+            let time_diff = TimeDelta::from_std(time_diff_std).ok()?;
+
+            if time_diff <= max_time_diff {
+                if closest_action.is_none() || time_diff < closest_action.unwrap().1 {
+                    closest_action = Some((action_row, time_diff));
+                }
             }
         }
     }
 
-    print_debug_message!("The errors vector: {:#?}", errors);
-    Ok(errors)
+    closest_action.map(|(action_row, _)| ActionPlotPoint::Error(ErrorPoint {
+        timestamp: parse_time(&action_row.timestamp).unwrap(),
+        action_rule: action_row.subaction_name.clone(),
+        violation: error_row.score.clone(),
+        advice: error_row.speech_command.clone(),
+    }))
 }
 
-fn build_csv_reader<R: Read>(reader: R) -> Reader<R> {
-    csv::ReaderBuilder::new()
-        .has_headers(true)
-        .flexible(true)
-        .from_reader(reader)
+fn parse_time(time_str: &str) -> Option<NaiveTime> {
+    NaiveTime::parse_from_str(time_str, "%H:%M:%S").ok()
 }
 
 fn main() {
@@ -71,14 +139,22 @@ fn main() {
     match File::open(file_name) {
         Ok(file) => {
             let buffered = BufReader::new(file);
-            if let Err(e) = process_csv(buffered) {
-                eprintln!("Error processing CSV: {}", e);
-            }
+           for result in stream_csv_with_errors(buffered, 10, Duration::from_secs(5)) {
+               match result {
+                   Ok(ActionPlotPoint::Error(error_point)) => {
+                       print_debug_message!("Error: {:?}", error_point);
+                   }
+                   Ok(ActionPlotPoint::Action(_action_point)) => {
+                       // print_debug_message!("Action: {:?}", action_point);
+                   }
+                   Err(_e) => {}//eprintln!("Error processing row: {}", e),
+               }
+           }
         }
         Err(e) => eprintln!("Error opening file: {}", e),
     }
 }
-
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,3 +213,4 @@ mod tests {
         assert!(errors.is_empty(), "Expected two errors for mixed input");
     }
 }
+*/

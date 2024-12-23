@@ -16,7 +16,20 @@ where
         _ => Err(serde::de::Error::custom("Field cannot be empty")),
     }
 }
-pub static COLUMN_NAMES: [&str; 9] = [
+
+// fn error_trigger_deserializer<'de, D>(deserializer: D) -> Result<bool, D::Error>
+// where
+//     D: Deserializer<'de>,
+// {
+//     let s: Option<String> = Option::deserialize(deserializer)?; // Deserialize as Option<String>
+//     Ok(s.as_ref().map_or(false, |value| {        // Use map_or
+//         !value.trim().is_empty() && value.contains("Error-Triggered")
+//     }))
+// }
+fn is_error_action(old_value: &String, score: &String) -> bool {
+    old_value.trim() == "Error-Triggered" && score.trim() == "Action-Was-Performed"
+}
+pub const COLUMN_NAMES: [&str; 9] = [
     "Time Stamp[Hr:Min:Sec]",
     "Action/Vital Name",
     "SubAction Time[Min:Sec]",
@@ -27,29 +40,38 @@ pub static COLUMN_NAMES: [&str; 9] = [
     "Username",
     "Speech Command",
 ];
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "PascalCase")] //interpret each field in PascalCase, where the first letter of the field is capitalized
 pub(crate) struct ActionCsvRow {
     #[serde(rename = "Time Stamp[Hr:Min:Sec]", deserialize_with = "non_empty_string")]
-    timestamp: String,
+    pub timestamp: String,
     #[serde(rename = "Action/Vital Name")]
-    action_name: Option<String>,
-    #[serde(rename = "SubAction Time[Min:Sec]")]
-    subaction_time: Option<String>,
-    #[serde(rename = "SubAction Name")]
-    subaction_name: Option<String>,
-    #[serde(rename = "Score")]
-    score: Option<String>,
-    #[serde(rename = "Old Value")]
-    old_value: Option<String>,
-    #[serde(rename = "New Value")]
-    new_value: Option<String>,
-    #[serde(deserialize_with = "csv::invalid_option")]
-    username: Option<String>,
-    #[serde(rename = "Speech Command", deserialize_with = "csv::invalid_option")]
-    speech_command: Option<String>,
+    pub action_vital_name: String,
+    #[serde(default, rename = "SubAction Time[Min:Sec]")]
+    pub subaction_time: String,
+    #[serde(default, rename = "SubAction Name")]
+    pub subaction_name: String,
+    #[serde(default, rename = "Score")]
+    pub score: String,
+    #[serde(default, rename = "Old Value")]
+    pub old_value: String,
+    #[serde(default, rename = "New Value")]
+    pub new_value: String,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default, rename = "Speech Command")]
+    pub speech_command: String,
+    #[serde(skip)]
+    pub error_trigger: bool,
+    #[serde(skip)]
+    pub transition_boundary: bool
 }
-
+impl ActionCsvRow {
+    pub fn post_deserialize(&mut self) {
+        self.transition_boundary = self.subaction_time.trim().is_empty() && self.subaction_name.is_empty() && self.score.is_empty() && self.old_value.is_empty() && self.new_value.is_empty();
+        self.error_trigger = is_error_action(&self.old_value, &self.score);
+    }
+}
 type HeaderValidatorType = fn(&[&str], &[&str]) -> Result<(), String>;
 fn validate_header(headers: &[&str], expected_headers: &[&str]) -> Result<(), String> {
     let mut headers_iter = headers.iter().map(|h| h.to_lowercase());
@@ -81,7 +103,7 @@ fn build_csv_header_validator<R: Read>(validate: HeaderValidatorType) -> impl Fn
 }
 
 pub fn validate_csv_header<R: Read>(reader: &mut Reader<R>) -> Result<(), String> {
-    build_csv_header_validator(validate_header)(Box::new(reader))
+    build_csv_header_validator(validate_header)(Box::new(reader)) 
 }
 
 #[cfg(test)]
