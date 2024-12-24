@@ -1,17 +1,22 @@
 use csv::Reader;
+use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::{
     fs::File,
     io::{self, BufReader, Read},
 };
-use std::collections::VecDeque;
-use std::time::Duration;
-use chrono::{NaiveTime, TimeDelta};
 
 mod action_csv_row;
 mod debug_message;
+mod util;
+mod scatter_points;
+
 use crate::action_csv_row::validate_csv_header;
+use crate::scatter_points::{Action, ErroneousAction, MissedAction, StageBoundary};
+use crate::util::{can_mark_each_other, is_erroneous_action, ERROR_MARKER_TIME_THRESHOLD};
 use action_csv_row::ActionCsvRow;
 use debug_message::print_debug_message;
+use scatter_points::ActionPlotPoint;
 
 fn read_csv_file_from_input() -> String {
     println!("Enter the CSV file name:");
@@ -26,128 +31,111 @@ fn build_csv_reader<R: Read>(reader: R) -> Reader<R> {
         .flexible(true)
         .from_reader(reader)
 }
-
-
-#[derive(Debug)]
-struct ErrorPoint {
-    timestamp: NaiveTime,
-    action_rule: String,
-    violation: String,
-    advice: String,
-}
-
-#[derive(Debug)]
-struct ActionPoint {
-    timestamp: NaiveTime
-}
-
-#[derive(Debug)]
-enum ActionPlotPoint {
-    Error(ErrorPoint),
-    Action(ActionPoint),
-}
-
 fn stream_csv_with_errors<R>(
     reader: R,
-    memory_size: usize,
-    max_time_diff_std: Duration,
+    max_rows_to_check: usize // Maximum rows to store in memory to check previous records to find erroneous action.
 ) -> impl Iterator<Item = Result<ActionPlotPoint, String>>
 where
     R: Read,
 {
     let mut rdr = build_csv_reader(reader);
-    let mut errors: Vec<String> = Vec::new();
+    let mut recent_rows: VecDeque<ActionCsvRow> = VecDeque::new();
+    let pending_error_marker: RefCell<Option<(usize, ActionCsvRow)>> = RefCell::new(None);//let pending_error_marker = RefCell::new(None);
 
     if let Err(e) = validate_csv_header(&mut rdr) {
-        errors.push(e);
-        print_debug_message!("Header parsing errors are pushed to errors vector: {:?}", errors);
+        print_debug_message!("Header parsing errors: {:?}", e);
     }
-    let mut buffer: VecDeque<ActionCsvRow> = VecDeque::new();
-    let records = rdr.into_records().map(move |result| {
+    
+    let rows = rdr.into_records().enumerate().map(move |(row_idx, result)| {
         match result {
             Ok(raw_row) => {
-                let mut record: ActionCsvRow = raw_row.deserialize(None).map_err(|e| format!("Could not deserialize row, error: {}", e))?;
-                record.post_deserialize();
-                // No need to clone here, we own the record now
-
-                buffer.push_back(record.clone());
-
-                if buffer.len() > memory_size {
-                    buffer.pop_front();
+                let current_row: ActionCsvRow = raw_row.deserialize(None).and_then(|mut cr: ActionCsvRow| {
+                    cr.post_deserialize();
+                    Ok(cr)
+                }).map_err(|e| format!("Could not deserialize row, error: {}", e))?;
+                
+                recent_rows.push_back(current_row.clone());
+                // Trim recent rows to keep a manageable size.
+                if recent_rows.len() > max_rows_to_check {
+                    recent_rows.pop_front();
                 }
-                // Convert StdDuration to TimeDelta *once*, outside the loop
-                let max_time_diff = TimeDelta::from_std(max_time_diff_std).map_err(|e| format!("Invalid max_time_diff: {}", e))?;
-                if record.error_trigger {
-                    process_error_row(&record, &buffer, max_time_diff).ok_or("No matching action row found within time range".to_string())
-                } else {
-                    Ok(ActionPlotPoint::Action(ActionPoint {
-                        timestamp: parse_time(&record.timestamp).unwrap_or_default()
-                    }))
+
+                // Check if there's a pending error marker from a previous iteration.
+                if let Some(error_point) = is_current_row_erroneous_action(&pending_error_marker, row_idx, &current_row) {
+                    return Ok(error_point);
                 }
+                // If current row is an error marker, check if it points to an erroneous action row within the previous rows.
+                if current_row.error_action_marker {
+                    match seek_erroneous_action_in_visited_rows(&recent_rows, &current_row, row_idx) {
+                        Some(erroneous_action_in_visited_rows) => return Ok(erroneous_action_in_visited_rows),
+                        None => {*pending_error_marker.borrow_mut() = Some((row_idx, current_row.clone()));}
+                    }
+                }
+                if current_row.action_point {
+                    return Ok(ActionPlotPoint::Action(Action::new(&current_row)));
+                }
+                if current_row.stage_boundary {
+                    return Ok(ActionPlotPoint::StageBoundary(StageBoundary::new(&current_row)));
+                }
+                if current_row.missed_action_marker {
+                    return Ok(ActionPlotPoint::MissedAction(MissedAction::new(&current_row)));
+                }
+
+                Err("Could create any point, this should not be an error, need to refactor".to_string())
             }
             Err(e) => Err(format!("Could not parse row, error: {}", e)),
         }
     });
 
-    records
+    rows
 }
 
-fn process_error_row(error_row: &ActionCsvRow, buffer: &VecDeque<ActionCsvRow>, max_time_diff: TimeDelta) -> Option<ActionPlotPoint> {
-    let error_time = parse_time(&error_row.timestamp)?;
-    let mut closest_action: Option<(&ActionCsvRow, TimeDelta)> = None;
-
-    for action_row in buffer {
-        if action_row.action_vital_name == error_row.username {
-            let action_time = parse_time(&action_row.timestamp)?;
-
-            // Calculate the difference as a ChronoDuration
-            let time_diff_chrono = if action_time > error_time {
-                action_time - error_time
-            } else {
-                error_time - action_time
-            };
-
-            // Convert ChronoDuration to std::time::Duration
-            let time_diff_std = time_diff_chrono.to_std().ok()?;
-
-            // Convert std::time::Duration to TimeDelta
-            let time_diff = TimeDelta::from_std(time_diff_std).ok()?;
-
-            if time_diff <= max_time_diff {
-                if closest_action.is_none() || time_diff < closest_action.unwrap().1 {
-                    closest_action = Some((action_row, time_diff));
-                }
-            }
+fn is_current_row_erroneous_action(pending_error_marker: &RefCell<Option<(usize, ActionCsvRow)>>, row_idx: usize, current_row: &ActionCsvRow) -> Option<ActionPlotPoint> {
+    if let Some((marker_index, error_marker_row)) = pending_error_marker.borrow().clone() {
+        // Check if the current row is an erroneous action row.
+        if is_erroneous_action(&current_row, &error_marker_row) {
+            print_debug_message!("Error marker at row {} points to erroneous action at row {}", marker_index, row_idx);
+            *pending_error_marker.borrow_mut() = None; // Clear the state as the error has been resolved.
+            let point = ActionPlotPoint::Error(ErroneousAction::new(&current_row, &error_marker_row));
+            return Some(point);
+        } else if !can_mark_each_other(&current_row, &error_marker_row) {
+            // If row count threshold is exceeded, log and forget the marker.
+            println!("Error marker at row {} could not find an erroneous action row within {} sec time threshold", marker_index, ERROR_MARKER_TIME_THRESHOLD);
+            *pending_error_marker.borrow_mut() = None;
         }
     }
-
-    closest_action.map(|(action_row, _)| ActionPlotPoint::Error(ErrorPoint {
-        timestamp: parse_time(&action_row.timestamp).unwrap(),
-        action_rule: action_row.subaction_name.clone(),
-        violation: error_row.score.clone(),
-        advice: error_row.speech_command.clone(),
-    }))
+    None
 }
-
-fn parse_time(time_str: &str) -> Option<NaiveTime> {
-    NaiveTime::parse_from_str(time_str, "%H:%M:%S").ok()
+fn seek_erroneous_action_in_visited_rows(visited_rows_buffer: &VecDeque<ActionCsvRow>, error_marker_row: &ActionCsvRow, error_marker_row_idx: usize) ->Option<ActionPlotPoint> {
+        for (recent_index, recent_row) in visited_rows_buffer.iter().enumerate().rev() {
+            if is_erroneous_action(&recent_row, &error_marker_row) {
+                print_debug_message!(
+                                "Error marker at row {} points backward to erroneous action at row {}",
+                                error_marker_row_idx,
+                                error_marker_row_idx - recent_index
+                            );
+                let point = ActionPlotPoint::Error(ErroneousAction::new(&recent_row, &error_marker_row));
+                return Some(point);
+            }
+        }
+    None
 }
-
 fn main() {
     let file_name = read_csv_file_from_input();
 
     match File::open(file_name) {
         Ok(file) => {
             let buffered = BufReader::new(file);
-           for result in stream_csv_with_errors(buffered, 10, Duration::from_secs(5)) {
+           for result in stream_csv_with_errors(buffered, 10) {
                match result {
                    Ok(ActionPlotPoint::Error(error_point)) => {
                        print_debug_message!("Error: {:?}", error_point);
                    }
                    Ok(ActionPlotPoint::Action(_action_point)) => {
                        // print_debug_message!("Action: {:?}", action_point);
-                   }
-                   Err(_e) => {}//eprintln!("Error processing row: {}", e),
+                   },
+                   Err(_e) => {},
+                   Ok(ActionPlotPoint::StageBoundary(_)) | Ok(ActionPlotPoint::MissedAction(_)) | Ok(ActionPlotPoint::CPRMarker(_, _)) => todo!(),
                }
            }
         }

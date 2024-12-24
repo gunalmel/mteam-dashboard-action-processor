@@ -1,34 +1,24 @@
+use crate::scatter_points::CsvRowTime;
+use crate::util::{extract_stage_name, is_action_row, is_error_action_marker, is_missed_action, is_stage_boundary, parse_time};
 use csv::Reader;
 // This lets us write `#[derive(Deserialize)]`.
 use serde::{Deserialize, Deserializer};
+use std::fmt::Display;
 use std::io::Read;
-
 /*
  * Used by serde macros to deserialize a non-empty string from a CSV file.
  */
-fn non_empty_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+fn non_empty_string<'de, D>(deserializer: D) -> Result<Option<CsvRowTime>, D::Error>
 where
     D: Deserializer<'de>,
 {
     let value: Option<String> = Option::deserialize(deserializer)?;
     match value {
-        Some(s) if !s.trim().is_empty() => Ok(s),
+        Some(s) if !s.trim().is_empty() => Ok(parse_time(&s[..])),
         _ => Err(serde::de::Error::custom("Field cannot be empty")),
     }
 }
 
-// fn error_trigger_deserializer<'de, D>(deserializer: D) -> Result<bool, D::Error>
-// where
-//     D: Deserializer<'de>,
-// {
-//     let s: Option<String> = Option::deserialize(deserializer)?; // Deserialize as Option<String>
-//     Ok(s.as_ref().map_or(false, |value| {        // Use map_or
-//         !value.trim().is_empty() && value.contains("Error-Triggered")
-//     }))
-// }
-fn is_error_action(old_value: &String, score: &String) -> bool {
-    old_value.trim() == "Error-Triggered" && score.trim() == "Action-Was-Performed"
-}
 pub const COLUMN_NAMES: [&str; 9] = [
     "Time Stamp[Hr:Min:Sec]",
     "Action/Vital Name",
@@ -40,11 +30,11 @@ pub const COLUMN_NAMES: [&str; 9] = [
     "Username",
     "Speech Command",
 ];
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Default, Debug, Deserialize, Clone)]
 #[serde(rename_all = "PascalCase")] //interpret each field in PascalCase, where the first letter of the field is capitalized
-pub(crate) struct ActionCsvRow {
+pub struct ActionCsvRow {
     #[serde(rename = "Time Stamp[Hr:Min:Sec]", deserialize_with = "non_empty_string")]
-    pub timestamp: String,
+    pub timestamp: Option<CsvRowTime>,
     #[serde(rename = "Action/Vital Name")]
     pub action_vital_name: String,
     #[serde(default, rename = "SubAction Time[Min:Sec]")]
@@ -61,15 +51,35 @@ pub(crate) struct ActionCsvRow {
     pub username: String,
     #[serde(default, rename = "Speech Command")]
     pub speech_command: String,
+    
     #[serde(skip)]
-    pub error_trigger: bool,
+    pub parsed_stage: Option<(u32, String)>,
     #[serde(skip)]
-    pub transition_boundary: bool
+    pub action_point: bool,
+    #[serde(skip)]
+    pub stage_boundary: bool,
+    #[serde(skip)]
+    pub error_action_marker: bool,
+    #[serde(skip)]
+    pub missed_action_marker: bool,
+}
+
+impl Display for ActionCsvRow {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "ActionCsvRow {{ timestamp: {:?}, action_vital_name: {:?}, subaction_time: {:?}, subaction_name: {:?}, score: {:?}, old_value: {:?}, new_value: {:?}, username: {:?}, speech_command: {:?}, parsed_stage: {:?}, action_point: {:?}, stage_boundary: {:?}, error_action_marker: {:?}, missed_action_marker: {:?} }}",
+            self.timestamp, self.action_vital_name, self.subaction_time, self.subaction_name, self.score, self.old_value, self.new_value, self.username, self.speech_command, self.parsed_stage, self.action_point, self.stage_boundary, self.error_action_marker, self.missed_action_marker
+        )
+    }
 }
 impl ActionCsvRow {
     pub fn post_deserialize(&mut self) {
-        self.transition_boundary = self.subaction_time.trim().is_empty() && self.subaction_name.is_empty() && self.score.is_empty() && self.old_value.is_empty() && self.new_value.is_empty();
-        self.error_trigger = is_error_action(&self.old_value, &self.score);
+        self.parsed_stage = extract_stage_name(&self.action_vital_name);
+        self.action_point = is_action_row(&self);
+        self.stage_boundary = is_stage_boundary(&self);
+        self.error_action_marker = is_error_action_marker(&self);
+        self.missed_action_marker = is_missed_action(&self);
     }
 }
 type HeaderValidatorType = fn(&[&str], &[&str]) -> Result<(), String>;
@@ -115,8 +125,8 @@ mod tests {
     }
 
     mod invalid_header_tests {
-        use crate::action_csv_row::validate_header;
         use crate::action_csv_row::tests::assert_header_check;
+        use crate::action_csv_row::validate_header;
 
         #[test]
         fn test_check_headers_missing_header() {
@@ -226,9 +236,9 @@ mod tests {
     }
 
     mod tests_apply_validation {
-        use std::io::{self, Read};
-        use csv::Reader;
         use crate::action_csv_row::apply_validation;
+        use csv::Reader;
+        use std::io::{self, Read};
 
         // Custom reader that always returns an error
         struct ValidReader;
