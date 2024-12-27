@@ -34,7 +34,7 @@ fn build_csv_reader<R: Read>(reader: R) -> Reader<R> {
 fn stream_csv_with_errors<R>(
     reader: R,
     max_rows_to_check: usize // Maximum rows to store in memory to check previous records to find erroneous action.
-) -> impl Iterator<Item = Result<Option<ActionPlotPoint>, String>>
+) -> impl Iterator<Item = Result<ActionPlotPoint, String>>
 where
     R: Read
 {
@@ -47,66 +47,70 @@ where
     if let Err(e) = validate_csv_header(&mut rdr) {
         print_debug_message!("Header parsing errors: {:?}", e);
     }
-    
+
     stage_boundaries.push(PlotLocation::default()); // stage boundaries should start from 0;
-    
-    let rows = rdr.into_records().enumerate().map(move |(row_idx, result)| {
+
+    let rows = rdr.into_records().enumerate().filter_map(move |(row_idx, result)| {
         match result {
             Ok(raw_row) => {
-                let current_row: ActionCsvRow = raw_row.deserialize(None).and_then(|mut cr: ActionCsvRow| {
+                let current_row: Result<ActionCsvRow, String> = raw_row.deserialize(None).and_then(|mut cr: ActionCsvRow| {
                     cr.post_deserialize();
                     Ok(cr)
-                }).map_err(|e| format!("Could not deserialize row, error: {}", e))?;
+                }).map_err(|e| format!("Could not deserialize row, error: {}", e));
 
-                // Trim recent rows to keep a manageable size.
-                if recent_rows.len() >= max_rows_to_check {
-                    recent_rows.pop_front();
-                }
-                recent_rows.push_back(current_row.clone());
-
-                if let Some(value) = process_if_stage_boundary(&mut stage_boundaries, &current_row) {
-                    return value;
-                }
-                if let Some(value) = process_if_cpr(&mut cpr_points, &current_row) {
-                    return value;
-                }
-                // Check if there's a pending error marker from a previous iteration.
-                if let Some(error_point) = is_current_row_erroneous_action(&pending_error_marker, row_idx, &current_row) {
-                    return Ok(Some(error_point));
-                }
-                // If current row is an error marker, check if it points to an erroneous action row within the previous rows.
-                if current_row.error_action_marker {
-                    match seek_erroneous_action_in_visited_rows(&recent_rows, &current_row, row_idx) {
-                        Some(erroneous_action_in_visited_rows) => return Ok(Some(erroneous_action_in_visited_rows)),
-                        None => {*pending_error_marker.borrow_mut() = Some((row_idx, current_row.clone()));}
+                match current_row {
+                    Ok(current_row) => {     // Trim recent rows to keep a manageable size.
+                    if recent_rows.len() >= max_rows_to_check {
+                        recent_rows.pop_front();
                     }
-                }
-                
-                if current_row.action_point {
-                    return Ok(Some(ActionPlotPoint::Action(Action::new(&current_row))));
-                }
-                if current_row.missed_action_marker {
-                    return Ok(Some(ActionPlotPoint::MissedAction(MissedAction::new(&current_row))));
-                }
+                    recent_rows.push_back(current_row.clone());
 
-                // The remaining rows are not points to be plotted so return None.
-                Ok(None)
+                    if let Some(value) = process_if_stage_boundary(&mut stage_boundaries, &current_row) {
+                        return Some(value);
+                    }
+                    if let Some(value) = process_if_cpr(&mut cpr_points, &current_row) {
+                        return Some(value);
+                    }
+                    // Check if there's a pending error marker from a previous iteration.
+                    if let Some(error_point) = is_current_row_erroneous_action(&pending_error_marker, row_idx, &current_row) {
+                        return Some(Ok(error_point));
+                    }
+                    // If current row is an error marker, check if it points to an erroneous action row within the previous rows.
+                    if current_row.error_action_marker {
+                        match seek_erroneous_action_in_visited_rows( & recent_rows, &current_row, row_idx) {
+                        Some(erroneous_action_in_visited_rows) => return Some(Ok(erroneous_action_in_visited_rows)),
+                        None => { * pending_error_marker.borrow_mut() = Some((row_idx, current_row.clone())); }
+                        }
+                    }
+
+                    if current_row.action_point {
+                            return Some(Ok(ActionPlotPoint::Action(Action::new(&current_row))));
+                        }
+                    if current_row.missed_action_marker {
+                        return Some(Ok(ActionPlotPoint::MissedAction(MissedAction::new( & current_row))));
+                    } 
+                    print_debug_message!("{} skipped line. Can not be mapped to a point that can be plotted on a graph", row_idx+2);
+                    // The remaining rows are not points to be plotted so return None.
+                    None
+                },
+                Err(e) => Some(Err(format!("Could not parse row, error: {}", e))),
             }
-            Err(e) => Err(format!("Could not parse row, error: {}", e)),
+            }
+            Err(e) => Some(Err(format!("Could not parse row, error: {}", e))),
         }
     });
 
     rows
 }
 
-fn process_if_stage_boundary(stage_boundary_points: &mut Vec<PlotLocation>, csv_row: &ActionCsvRow) -> Option<Result<Option<ActionPlotPoint>, String>> {
+fn process_if_stage_boundary(stage_boundary_points: &mut Vec<PlotLocation>, csv_row: &ActionCsvRow) -> Option<Result<ActionPlotPoint, String>> {
     if csv_row.stage_boundary {
         match stage_boundary_points.pop() {
             Some(plot_location) => {
                 let mut start_location = plot_location;
                 start_location.stage = csv_row.parsed_stage.clone().unwrap();
                 stage_boundary_points.push(PlotLocation::new(csv_row)); //will be the starting point for the next stage
-                Some(Ok(Some(ActionPlotPoint::Period(PeriodType::Stage, Some(start_location), Some(PlotLocation::new(csv_row))))))
+                Some(Ok(ActionPlotPoint::Period(PeriodType::Stage, Some(start_location), Some(PlotLocation::new(csv_row)))))
             },
             None => {
                 stage_boundary_points.push(PlotLocation::new(csv_row));
@@ -118,14 +122,14 @@ fn process_if_stage_boundary(stage_boundary_points: &mut Vec<PlotLocation>, csv_
     }
 }
 
-fn process_if_cpr(cpr_points: &mut Vec<ActionPlotPoint>, csv_row: &ActionCsvRow) -> Option<Result<Option<ActionPlotPoint>, String>> {
+fn process_if_cpr(cpr_points: &mut Vec<ActionPlotPoint>, csv_row: &ActionCsvRow) -> Option<Result<ActionPlotPoint, String>> {
     match check_cpr(&csv_row) {
         Some(cpr) => {
             match cpr_points.pop() {
                 Some(previous_cpr) => {
                     Some(match merge_plot_location_range(Some(cpr), Some(previous_cpr)) {
                         Ok(merged_cpr) => {
-                            Ok(Some(merged_cpr))
+                            Ok(merged_cpr)
                         },
                         Err(err_msg) => {
                             Err(err_msg)
@@ -134,7 +138,7 @@ fn process_if_cpr(cpr_points: &mut Vec<ActionPlotPoint>, csv_row: &ActionCsvRow)
                 },
                 None => {
                     cpr_points.push(cpr.clone());
-                    Some(Ok(None))
+                    None
                 }
             }
         }
@@ -181,20 +185,19 @@ fn main() {
         Ok(file) => {
             let buffered = BufReader::new(file);
            for (row_idx, result) in stream_csv_with_errors(buffered, 10).enumerate() {
-               let line_number = row_idx + 2;
+               let item_number = row_idx + 1;
                match result {
-                   // Ok(Some(ActionPlotPoint::Error(error_point))) => {
-                   //     print_debug_message!("{} Error: {:#?}", line_number, error_point);
-                   // }
-                   // Ok(Some(ActionPlotPoint::Action(action_point))) => {
-                   //     print_debug_message!("{} Action: {:#?}", line_number, action_point);
-                   // },
-                   Ok(Some(ActionPlotPoint::Period(PeriodType::Stage, start, end))) => { print_debug_message!("{} stage_boundary: {:#?}", line_number, (start,end)); },
-                   // Ok(Some(ActionPlotPoint::MissedAction(missed_action))) => { print_debug_message!("{} missed_action: {:?}", line_number, missed_action); },
-                   // Ok(Some(ActionPlotPoint::Period(PeriodType::CPR, start, end))) => { print_debug_message!("{} stage_boundary: {:#?}", line_number, (start,end)); },
-                   // Ok(None) => {print_debug_message!("{} skipped line", line_number)},
-                   // Err(e) => {print_debug_message!("{} error: {}", line_number, e);}
-                   _ => {}
+                  // Ok(_)=> { print_debug_message!("{}", item_number); },
+                   Ok(ActionPlotPoint::Error(error_point)) => {
+                       print_debug_message!("{} Error: {:#?}", item_number, error_point);
+                   }
+                   Ok(ActionPlotPoint::Action(action_point)) => {
+                       print_debug_message!("{} Action: {:#?}", item_number, action_point);
+                   },
+                   Ok(ActionPlotPoint::Period(PeriodType::Stage, start, end)) => { print_debug_message!("{} stage_boundary: {:#?}", item_number, (start,end)); },
+                   Ok(ActionPlotPoint::MissedAction(missed_action)) => { print_debug_message!("{} missed_action: {:?}", item_number, missed_action); },
+                   Ok(ActionPlotPoint::Period(PeriodType::CPR, start, end)) => { print_debug_message!("{} stage_boundary: {:#?}", item_number, (start,end)); },
+                   Err(e) => {print_debug_message!("{} error: {}", item_number, e);}
                }
            }
         }
