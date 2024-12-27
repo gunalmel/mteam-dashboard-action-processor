@@ -1,9 +1,9 @@
 use crate::scatter_points::CsvRowTime;
-use crate::util::{extract_stage_name, is_action_row, is_error_action_marker, is_missed_action, is_stage_boundary, parse_time};
+use crate::util::{extract_stage_name, is_action_row, is_error_action_marker, is_missed_action, is_stage_boundary, parse_time, process_action_name};
 use csv::Reader;
 // This lets us write `#[derive(Deserialize)]`.
 use serde::{Deserialize, Deserializer};
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 use std::io::Read;
 /*
  * Used by serde macros to deserialize a non-empty string from a CSV file.
@@ -55,6 +55,12 @@ pub struct ActionCsvRow {
     #[serde(skip)]
     pub parsed_stage: Option<(u32, String)>,
     #[serde(skip)]
+    pub action_name: String,
+    #[serde(skip)]
+    pub action_category: String,
+    #[serde(skip)]
+    pub shock_value: String,
+    #[serde(skip)]
     pub action_point: bool,
     #[serde(skip)]
     pub stage_boundary: bool,
@@ -65,14 +71,31 @@ pub struct ActionCsvRow {
 }
 
 impl Display for ActionCsvRow {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "ActionCsvRow {{ timestamp: {:?}, action_vital_name: {:?}, subaction_time: {:?}, subaction_name: {:?}, score: {:?}, old_value: {:?}, new_value: {:?}, username: {:?}, speech_command: {:?}, parsed_stage: {:?}, action_point: {:?}, stage_boundary: {:?}, error_action_marker: {:?}, missed_action_marker: {:?} }}",
-            self.timestamp, self.action_vital_name, self.subaction_time, self.subaction_name, self.score, self.old_value, self.new_value, self.username, self.speech_command, self.parsed_stage, self.action_point, self.stage_boundary, self.error_action_marker, self.missed_action_marker
+            "ActionCsvRow {{ timestamp: {:?}, action_vital_name: {:?}, subaction_time: {:?}, subaction_name: {:?}, score: {:?}, old_value: {:?}, new_value: {:?}, username: {:?}, speech_command: {:?}, parsed_stage: {:?}, action_name: {:?}, action_category: {:?}, shock_value: {:?}, action_point: {:?}, stage_boundary: {:?}, error_action_marker: {:?}, missed_action_marker: {:?} }}",
+            self.timestamp,
+            self.action_vital_name,
+            self.subaction_time,
+            self.subaction_name,
+            self.score,
+            self.old_value,
+            self.new_value,
+            self.username,
+            self.speech_command,
+            self.parsed_stage,
+            self.action_name,
+            self.action_category,
+            self.shock_value,
+            self.action_point,
+            self.stage_boundary,
+            self.error_action_marker,
+            self.missed_action_marker
         )
     }
 }
+
 impl ActionCsvRow {
     pub fn post_deserialize(&mut self) {
         self.parsed_stage = extract_stage_name(&self.action_vital_name);
@@ -80,6 +103,10 @@ impl ActionCsvRow {
         self.stage_boundary = is_stage_boundary(&self);
         self.error_action_marker = is_error_action_marker(&self);
         self.missed_action_marker = is_missed_action(&self);
+        let processed_action_name = process_action_name(&self.subaction_name);
+        self.action_name = processed_action_name.0;
+        self.action_category = processed_action_name.1;
+        self.shock_value = processed_action_name.2;
     }
 }
 type HeaderValidatorType = fn(&[&str], &[&str]) -> Result<(), String>;

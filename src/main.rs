@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::{
     fs::File,
-    io::{self, BufReader, Read},
+    io::{BufReader, Read},
 };
 
 mod action_csv_row;
@@ -13,17 +13,17 @@ mod scatter_points;
 
 use crate::action_csv_row::validate_csv_header;
 use crate::scatter_points::{Action, ErroneousAction, MissedAction, StageBoundary};
-use crate::util::{can_mark_each_other, is_erroneous_action, ERROR_MARKER_TIME_THRESHOLD};
+use crate::util::{can_mark_each_other, check_cpr, is_erroneous_action, merge_cpr, ERROR_MARKER_TIME_THRESHOLD};
 use action_csv_row::ActionCsvRow;
 use debug_message::print_debug_message;
 use scatter_points::ActionPlotPoint;
 
-fn read_csv_file_from_input() -> String {
-    println!("Enter the CSV file name:");
-    let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap();
-    input.trim().to_string()
-}
+// fn read_csv_file_from_input() -> String {
+//     println!("Enter the CSV file name:");
+//     let mut input = String::new();
+//     io::stdin().read_line(&mut input).unwrap();
+//     input.trim().to_string()
+// }
 
 fn build_csv_reader<R: Read>(reader: R) -> Reader<R> {
     csv::ReaderBuilder::new()
@@ -34,13 +34,14 @@ fn build_csv_reader<R: Read>(reader: R) -> Reader<R> {
 fn stream_csv_with_errors<R>(
     reader: R,
     max_rows_to_check: usize // Maximum rows to store in memory to check previous records to find erroneous action.
-) -> impl Iterator<Item = Result<ActionPlotPoint, String>>
+) -> impl Iterator<Item = Result<Option<ActionPlotPoint>, String>>
 where
-    R: Read,
+    R: Read
 {
     let mut rdr = build_csv_reader(reader);
-    let mut recent_rows: VecDeque<ActionCsvRow> = VecDeque::new();
-    let pending_error_marker: RefCell<Option<(usize, ActionCsvRow)>> = RefCell::new(None);//let pending_error_marker = RefCell::new(None);
+    let mut recent_rows: VecDeque<ActionCsvRow> = VecDeque::with_capacity(max_rows_to_check);
+    let mut cpr_points: Vec<ActionPlotPoint> = Vec::new();
+    let pending_error_marker = RefCell::new(None);//let pending_error_marker = RefCell::new(None);
 
     if let Err(e) = validate_csv_header(&mut rdr) {
         print_debug_message!("Header parsing errors: {:?}", e);
@@ -53,32 +54,36 @@ where
                     cr.post_deserialize();
                     Ok(cr)
                 }).map_err(|e| format!("Could not deserialize row, error: {}", e))?;
-                
-                recent_rows.push_back(current_row.clone());
+
                 // Trim recent rows to keep a manageable size.
-                if recent_rows.len() > max_rows_to_check {
+                if recent_rows.len() >= max_rows_to_check {
                     recent_rows.pop_front();
                 }
+                recent_rows.push_back(current_row.clone());
 
+                if current_row.stage_boundary {
+                    return Ok(Some(ActionPlotPoint::StageBoundary(StageBoundary::new(&current_row))));
+                }
+                if let Some(value) = process_if_cpr(&mut cpr_points, &current_row) {
+                    return value;
+                }
                 // Check if there's a pending error marker from a previous iteration.
                 if let Some(error_point) = is_current_row_erroneous_action(&pending_error_marker, row_idx, &current_row) {
-                    return Ok(error_point);
+                    return Ok(Some(error_point));
                 }
                 // If current row is an error marker, check if it points to an erroneous action row within the previous rows.
                 if current_row.error_action_marker {
                     match seek_erroneous_action_in_visited_rows(&recent_rows, &current_row, row_idx) {
-                        Some(erroneous_action_in_visited_rows) => return Ok(erroneous_action_in_visited_rows),
+                        Some(erroneous_action_in_visited_rows) => return Ok(Some(erroneous_action_in_visited_rows)),
                         None => {*pending_error_marker.borrow_mut() = Some((row_idx, current_row.clone()));}
                     }
                 }
+                
                 if current_row.action_point {
-                    return Ok(ActionPlotPoint::Action(Action::new(&current_row)));
-                }
-                if current_row.stage_boundary {
-                    return Ok(ActionPlotPoint::StageBoundary(StageBoundary::new(&current_row)));
+                    return Ok(Some(ActionPlotPoint::Action(Action::new(&current_row))));
                 }
                 if current_row.missed_action_marker {
-                    return Ok(ActionPlotPoint::MissedAction(MissedAction::new(&current_row)));
+                    return Ok(Some(ActionPlotPoint::MissedAction(MissedAction::new(&current_row))));
                 }
 
                 Err("Could create any point, this should not be an error, need to refactor".to_string())
@@ -90,29 +95,54 @@ where
     rows
 }
 
+fn process_if_cpr(cpr_points: &mut Vec<ActionPlotPoint>, current_row: &ActionCsvRow) -> Option<Result<Option<ActionPlotPoint>, String>> {
+    match check_cpr(&current_row) {
+        Some(cpr) => {
+            match cpr_points.pop() {
+                Some(previous_cpr) => {
+                    Some(match merge_cpr(Some(cpr), Some(previous_cpr)) {
+                        Ok(merged_cpr) => {
+                            Ok(Some(merged_cpr))
+                        },
+                        Err(err_msg) => {
+                            Err(err_msg)
+                        }
+                    })
+                },
+                None => {
+                    cpr_points.push(cpr.clone());
+                    Some(Ok(None))
+                }
+            }
+        }
+        None => None
+    }
+}
+
 fn is_current_row_erroneous_action(pending_error_marker: &RefCell<Option<(usize, ActionCsvRow)>>, row_idx: usize, current_row: &ActionCsvRow) -> Option<ActionPlotPoint> {
-    if let Some((marker_index, error_marker_row)) = pending_error_marker.borrow().clone() {
+    let pending_error_marker_value = pending_error_marker.borrow().clone();
+    if let Some((marker_index, error_marker_row)) = pending_error_marker_value {
         // Check if the current row is an erroneous action row.
         if is_erroneous_action(&current_row, &error_marker_row) {
-            print_debug_message!("Error marker at row {} points to erroneous action at row {}", marker_index, row_idx);
+            print_debug_message!("Error marker at row {} points to erroneous action at row {}", marker_index+2, row_idx+2);
             *pending_error_marker.borrow_mut() = None; // Clear the state as the error has been resolved.
             let point = ActionPlotPoint::Error(ErroneousAction::new(&current_row, &error_marker_row));
             return Some(point);
         } else if !can_mark_each_other(&current_row, &error_marker_row) {
             // If row count threshold is exceeded, log and forget the marker.
-            println!("Error marker at row {} could not find an erroneous action row within {} sec time threshold", marker_index, ERROR_MARKER_TIME_THRESHOLD);
+            print_debug_message!("Error marker at row {} could not find an erroneous action row within {} sec time threshold", marker_index+2, ERROR_MARKER_TIME_THRESHOLD);
             *pending_error_marker.borrow_mut() = None;
         }
     }
     None
 }
 fn seek_erroneous_action_in_visited_rows(visited_rows_buffer: &VecDeque<ActionCsvRow>, error_marker_row: &ActionCsvRow, error_marker_row_idx: usize) ->Option<ActionPlotPoint> {
-        for (recent_index, recent_row) in visited_rows_buffer.iter().enumerate().rev() {
+        for (recent_index, recent_row) in visited_rows_buffer.iter().rev().enumerate() {
             if is_erroneous_action(&recent_row, &error_marker_row) {
                 print_debug_message!(
                                 "Error marker at row {} points backward to erroneous action at row {}",
-                                error_marker_row_idx,
-                                error_marker_row_idx - recent_index
+                                error_marker_row_idx+2,
+                                (error_marker_row_idx - recent_index)+2
                             );
                 let point = ActionPlotPoint::Error(ErroneousAction::new(&recent_row, &error_marker_row));
                 return Some(point);
@@ -120,22 +150,28 @@ fn seek_erroneous_action_in_visited_rows(visited_rows_buffer: &VecDeque<ActionCs
         }
     None
 }
-fn main() {
-    let file_name = read_csv_file_from_input();
 
+fn main() {
+    // let file_name = read_csv_file_from_input();
+    let file_name = "timeline-multiplayer-09182024.csv";
     match File::open(file_name) {
         Ok(file) => {
             let buffered = BufReader::new(file);
-           for result in stream_csv_with_errors(buffered, 10) {
+           for (row_idx, result) in stream_csv_with_errors(buffered, 10).enumerate() {
+               let line_number = row_idx + 2;
                match result {
-                   Ok(ActionPlotPoint::Error(error_point)) => {
-                       print_debug_message!("Error: {:?}", error_point);
-                   }
-                   Ok(ActionPlotPoint::Action(_action_point)) => {
-                       // print_debug_message!("Action: {:?}", action_point);
-                   },
-                   Err(_e) => {},
-                   Ok(ActionPlotPoint::StageBoundary(_)) | Ok(ActionPlotPoint::MissedAction(_)) | Ok(ActionPlotPoint::CPRMarker(_, _)) => todo!(),
+                   // Ok(Some(ActionPlotPoint::Error(error_point))) => {
+                   //     print_debug_message!("{} Error: {:#?}", line_number, error_point);
+                   // }
+                   // Ok(Some(ActionPlotPoint::Action(action_point))) => {
+                   //     print_debug_message!("{} Action: {:#?}", line_number, action_point);
+                   // },
+                   Ok(Some(ActionPlotPoint::StageBoundary(stage_boundary))) => { print_debug_message!("{} stage_boundary: {:?}", line_number, stage_boundary); },
+                   // Ok(Some(ActionPlotPoint::MissedAction(missed_action))) => { print_debug_message!("{} missed_action: {:?}", line_number, missed_action); },
+                   // Ok(Some(ActionPlotPoint::CPR(cpr_begin, cpr_end))) => { print_debug_message!("{} cpr begin: {:#?}, cpr end: {:#?}", line_number, cpr_begin, cpr_end); },
+                   // Ok(None) => {print_debug_message!("{} skipped line", line_number)},
+                   // Err(e) => {print_debug_message!("{} error: {}", line_number, e);}
+                   _ => {}
                }
            }
         }

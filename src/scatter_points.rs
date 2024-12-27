@@ -1,13 +1,13 @@
 use crate::action_csv_row::ActionCsvRow;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct CsvRowTime {
     pub total_seconds: u32,
     pub date_string: String,
     pub timestamp: String,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct PlotLocation {
     pub timestamp: CsvRowTime,
     pub stage: (u32, String)
@@ -22,7 +22,8 @@ impl PlotLocation {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
+#[derive(Clone)]
 pub struct ErrorInfo {
     pub action_rule: String,
     pub violation: String,
@@ -39,7 +40,7 @@ impl ErrorInfo {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct StageBoundary {
     pub location: PlotLocation
 }
@@ -52,11 +53,12 @@ impl StageBoundary {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+#[derive(PartialEq)]
 pub struct Action {
     pub location: PlotLocation,
-    pub category_name: String,
     pub name: String,
+    pub action_category: String,
     pub shock_value: String
 }
 
@@ -67,18 +69,18 @@ impl Action {
                 timestamp: row.timestamp.clone().unwrap_or(CsvRowTime::default()),
                 stage: row.parsed_stage.clone().unwrap_or(PlotLocation::default().stage),
             },
-            category_name: row.action_vital_name.clone(),
-            name: row.subaction_name.clone(),
-            shock_value: "this needs to be implemented".to_string(),
+            name: row.action_name.clone(),
+            action_category: row.action_category.clone(),
+            shock_value: row.shock_value.clone(),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ErroneousAction {
     pub location: PlotLocation,
-    pub category_name: String,
     pub name: String,
+    pub action_category: String,
     pub shock_value: String,
     pub error_info: ErrorInfo
 }
@@ -87,23 +89,18 @@ impl ErroneousAction {
     pub fn new(action_row: &ActionCsvRow, error_marker_row: &ActionCsvRow) -> Self {
         Self {
             location: PlotLocation::new(action_row),
-            category_name: action_row.action_vital_name.clone(),
-            name: action_row.subaction_name.clone(),
-            shock_value: "this needs to be implemented".to_string(),
+            name: action_row.action_name.clone(),
+            action_category: action_row.action_category.clone(),
+            shock_value: action_row.shock_value.clone(),
             error_info: ErrorInfo::new(error_marker_row)
         }
     }
 }
 
-#[derive(Debug)]
-pub struct ErrorActionMarker {
-    pub location: PlotLocation,
-    pub error_info: ErrorInfo
-}
-
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct MissedAction {
     pub location: PlotLocation,
+    pub action_name: String,
     pub error_info: ErrorInfo
 }
 
@@ -111,17 +108,19 @@ impl MissedAction {
     pub(crate) fn new(row: &ActionCsvRow) -> MissedAction {
         MissedAction {
             location: PlotLocation::new(row),
+            action_name: row.action_vital_name.clone(),
             error_info: ErrorInfo::new(row)
         }
     }
 }
 
 #[derive(Debug)]
+#[derive(PartialEq, Clone)]
 pub enum ActionPlotPoint {
     Error(ErroneousAction),
     Action(Action),
     StageBoundary(StageBoundary),
     MissedAction(MissedAction),
-    CPRMarker(PlotLocation, PlotLocation)
+    CPR(Option<PlotLocation>, Option<PlotLocation>)
 }
 
