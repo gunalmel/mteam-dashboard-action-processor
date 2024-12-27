@@ -1,10 +1,24 @@
 use crate::action_csv_row::ActionCsvRow;
+use chrono::{DateTime, Datelike, TimeZone, Utc};
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CsvRowTime {
     pub total_seconds: u32,
     pub date_string: String,
     pub timestamp: String,
+}
+
+impl Default for CsvRowTime {
+    fn default() -> Self {
+        let now_utc: DateTime<Utc> = Utc::now();
+        let beginning_of_day_utc: DateTime<Utc> = Utc.with_ymd_and_hms(now_utc.year(), now_utc.month(), now_utc.day(), 0, 0, 0).unwrap();
+
+        CsvRowTime {
+            total_seconds: 0,
+            date_string: beginning_of_day_utc.format("%Y-%m-%d %H:%M:%S").to_string(),
+            timestamp: String::from("00:00:00")
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -36,19 +50,6 @@ impl ErrorInfo {
             action_rule: row.subaction_name.clone(),
             violation: row.score.clone(),
             advice: row.speech_command.clone(),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct StageBoundary {
-    pub location: PlotLocation
-}
-
-impl StageBoundary {
-    pub fn new(row: &ActionCsvRow) -> Self {
-        Self { 
-            location: PlotLocation::new(row)
         }
     }
 }
@@ -116,11 +117,17 @@ impl MissedAction {
 
 #[derive(Debug)]
 #[derive(PartialEq, Clone)]
+pub enum PeriodType {
+    CPR,
+    Stage
+}
+
+#[derive(Debug)]
+#[derive(PartialEq, Clone)]
 pub enum ActionPlotPoint {
     Error(ErroneousAction),
     Action(Action),
-    StageBoundary(StageBoundary),
     MissedAction(MissedAction),
-    CPR(Option<PlotLocation>, Option<PlotLocation>)
+    Period(PeriodType, Option<PlotLocation>, Option<PlotLocation>)
 }
 

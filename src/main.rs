@@ -12,8 +12,8 @@ mod util;
 mod scatter_points;
 
 use crate::action_csv_row::validate_csv_header;
-use crate::scatter_points::{Action, ErroneousAction, MissedAction, StageBoundary};
-use crate::util::{can_mark_each_other, check_cpr, is_erroneous_action, merge_cpr, ERROR_MARKER_TIME_THRESHOLD};
+use crate::scatter_points::{Action, ErroneousAction, MissedAction, PeriodType, PlotLocation};
+use crate::util::{can_mark_each_other, check_cpr, is_erroneous_action, merge_plot_location_range, ERROR_MARKER_TIME_THRESHOLD};
 use action_csv_row::ActionCsvRow;
 use debug_message::print_debug_message;
 use scatter_points::ActionPlotPoint;
@@ -41,11 +41,14 @@ where
     let mut rdr = build_csv_reader(reader);
     let mut recent_rows: VecDeque<ActionCsvRow> = VecDeque::with_capacity(max_rows_to_check);
     let mut cpr_points: Vec<ActionPlotPoint> = Vec::new();
+    let mut stage_boundaries: Vec<PlotLocation> = Vec::new();
     let pending_error_marker = RefCell::new(None);//let pending_error_marker = RefCell::new(None);
 
     if let Err(e) = validate_csv_header(&mut rdr) {
         print_debug_message!("Header parsing errors: {:?}", e);
     }
+    
+    stage_boundaries.push(PlotLocation::default()); // stage boundaries should start from 0;
     
     let rows = rdr.into_records().enumerate().map(move |(row_idx, result)| {
         match result {
@@ -61,8 +64,8 @@ where
                 }
                 recent_rows.push_back(current_row.clone());
 
-                if current_row.stage_boundary {
-                    return Ok(Some(ActionPlotPoint::StageBoundary(StageBoundary::new(&current_row))));
+                if let Some(value) = process_if_stage_boundary(&mut stage_boundaries, &current_row) {
+                    return value;
                 }
                 if let Some(value) = process_if_cpr(&mut cpr_points, &current_row) {
                     return value;
@@ -86,7 +89,8 @@ where
                     return Ok(Some(ActionPlotPoint::MissedAction(MissedAction::new(&current_row))));
                 }
 
-                Err("Could create any point, this should not be an error, need to refactor".to_string())
+                // The remaining rows are not points to be plotted so return None.
+                Ok(None)
             }
             Err(e) => Err(format!("Could not parse row, error: {}", e)),
         }
@@ -95,12 +99,31 @@ where
     rows
 }
 
-fn process_if_cpr(cpr_points: &mut Vec<ActionPlotPoint>, current_row: &ActionCsvRow) -> Option<Result<Option<ActionPlotPoint>, String>> {
-    match check_cpr(&current_row) {
+fn process_if_stage_boundary(stage_boundary_points: &mut Vec<PlotLocation>, csv_row: &ActionCsvRow) -> Option<Result<Option<ActionPlotPoint>, String>> {
+    if csv_row.stage_boundary {
+        match stage_boundary_points.pop() {
+            Some(plot_location) => {
+                let mut start_location = plot_location;
+                start_location.stage = csv_row.parsed_stage.clone().unwrap();
+                stage_boundary_points.push(PlotLocation::new(csv_row)); //will be the starting point for the next stage
+                Some(Ok(Some(ActionPlotPoint::Period(PeriodType::Stage, Some(start_location), Some(PlotLocation::new(csv_row))))))
+            },
+            None => {
+                stage_boundary_points.push(PlotLocation::new(csv_row));
+                None
+            }
+        }
+    } else {
+        None
+    }
+}
+
+fn process_if_cpr(cpr_points: &mut Vec<ActionPlotPoint>, csv_row: &ActionCsvRow) -> Option<Result<Option<ActionPlotPoint>, String>> {
+    match check_cpr(&csv_row) {
         Some(cpr) => {
             match cpr_points.pop() {
                 Some(previous_cpr) => {
-                    Some(match merge_cpr(Some(cpr), Some(previous_cpr)) {
+                    Some(match merge_plot_location_range(Some(cpr), Some(previous_cpr)) {
                         Ok(merged_cpr) => {
                             Ok(Some(merged_cpr))
                         },
@@ -166,9 +189,9 @@ fn main() {
                    // Ok(Some(ActionPlotPoint::Action(action_point))) => {
                    //     print_debug_message!("{} Action: {:#?}", line_number, action_point);
                    // },
-                   Ok(Some(ActionPlotPoint::StageBoundary(stage_boundary))) => { print_debug_message!("{} stage_boundary: {:?}", line_number, stage_boundary); },
+                   Ok(Some(ActionPlotPoint::Period(PeriodType::Stage, start, end))) => { print_debug_message!("{} stage_boundary: {:#?}", line_number, (start,end)); },
                    // Ok(Some(ActionPlotPoint::MissedAction(missed_action))) => { print_debug_message!("{} missed_action: {:?}", line_number, missed_action); },
-                   // Ok(Some(ActionPlotPoint::CPR(cpr_begin, cpr_end))) => { print_debug_message!("{} cpr begin: {:#?}, cpr end: {:#?}", line_number, cpr_begin, cpr_end); },
+                   // Ok(Some(ActionPlotPoint::Period(PeriodType::CPR, start, end))) => { print_debug_message!("{} stage_boundary: {:#?}", line_number, (start,end)); },
                    // Ok(None) => {print_debug_message!("{} skipped line", line_number)},
                    // Err(e) => {print_debug_message!("{} error: {}", line_number, e);}
                    _ => {}
