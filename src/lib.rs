@@ -1,0 +1,10 @@
+mod csv_reader;
+mod row_processing;
+mod state_management;
+mod plot_point_processors;
+mod action_csv_row;
+mod util;
+pub mod debug_message;
+pub mod scatter_points;
+pub mod csv_processor;
+pub use csv_processor::process_csv;

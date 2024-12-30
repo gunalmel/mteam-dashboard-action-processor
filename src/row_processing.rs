@@ -1,10 +1,12 @@
 use csv::StringRecord;
 use std::collections::VecDeque;
-use crate::{CsvProcessingState, CsvResult, PlotPointResult};
 use crate::action_csv_row::ActionCsvRow;
 use crate::debug_message::print_debug_message;
+use crate::plot_point_processors::{process_action_point, process_cpr_lines, process_erroneous_action, process_if_stage_boundary};
+use crate::scatter_points::ActionPlotPoint;
+use crate::state_management::CsvProcessingState;
 
-fn parse_csv_row(result: Result<StringRecord, csv::Error>) -> CsvResult {
+fn parse_csv_row(result: Result<StringRecord, csv::Error>) -> Result<ActionCsvRow, String> {
     result
         .and_then(|raw_row| {
             let mut csv_row: ActionCsvRow = raw_row.deserialize(None)?;
@@ -18,7 +20,7 @@ pub fn process_csv_row(
     row_idx: usize,
     result: Result<StringRecord, csv::Error>,
     state: &mut CsvProcessingState,
-) -> Option<PlotPointResult> {
+) -> Option<Result<ActionPlotPoint, String>> {
     let current_row = match parse_csv_row(result) {
         Ok(row) => row,
         Err(e) => return Some(Err(e)),
@@ -26,10 +28,10 @@ pub fn process_csv_row(
 
     update_recent_rows(&current_row, &mut state.recent_rows, state.max_rows_to_check);
 
-    crate::process_stage_boundaries(&current_row, &mut state.stage_boundaries)
-        .or_else(|| crate::process_cpr_lines(&mut state.cpr_points, &current_row))
-        .or_else(|| crate::process_erroneous_action(state, row_idx, &current_row))
-        .or_else(|| crate::process_action_point(&current_row))
+    process_if_stage_boundary(&mut state.stage_boundaries, &current_row)
+        .or_else(|| process_cpr_lines(&mut state.cpr_points, &current_row))
+        .or_else(|| process_erroneous_action(state, row_idx, &current_row))
+        .or_else(|| process_action_point(&current_row))
         .or_else(|| log_skipped_row(row_idx))
 }
 
@@ -40,7 +42,7 @@ fn update_recent_rows(current_row: &ActionCsvRow, recent_rows: &mut VecDeque<Act
     recent_rows.push_back(current_row.clone());
 }
 
-fn log_skipped_row(row_idx: usize) -> Option<PlotPointResult> {
+fn log_skipped_row(row_idx: usize) -> Option<Result<ActionPlotPoint, String>> {
     print_debug_message!(
         "{} skipped line. Cannot be mapped to a point plotted on a graph.",
         row_idx + 2
