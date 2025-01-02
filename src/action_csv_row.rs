@@ -1,5 +1,6 @@
+use crate::detection::is_action_row;
+use crate::parsing::{extract_stage_name, parse_time, process_action_name};
 use crate::plot_structures::CsvRowTime;
-use crate::csv_row_utils::{extract_stage_name, is_action_row, parse_time, process_action_name};
 // This lets us write `#[derive(Deserialize)]`.
 use serde::{Deserialize, Deserializer};
 use std::fmt::{Display, Formatter};

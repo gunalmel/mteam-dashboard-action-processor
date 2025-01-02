@@ -2,9 +2,9 @@ use csv::StringRecord;
 use std::collections::VecDeque;
 use crate::action_csv_row::ActionCsvRow;
 use crate::debug_message::print_debug_message;
-use crate::plot_point_processors::{process_action_point, process_cpr_lines, process_erroneous_action, process_if_stage_boundary};
+use crate::plot_processors::{process_action_point, process_cpr_lines, process_erroneous_action, process_if_stage_boundary};
 use crate::plot_structures::ActionPlotPoint;
-use crate::csv_processing_state::CsvProcessingState;
+use crate::processing_state::CsvProcessingState;
 
 fn parse_csv_row(result: Result<StringRecord, csv::Error>) -> Result<ActionCsvRow, String> {
     result

@@ -1,10 +1,10 @@
 use crate::action_csv_row::ActionCsvRow;
-use crate::csv_processing_state::CsvProcessingState;
-use crate::csv_row_utils::{can_mark_each_other, check_cpr, is_erroneous_action, is_error_action_marker, is_missed_action, is_stage_boundary, ERROR_MARKER_TIME_THRESHOLD};
+use crate::processing_state::CsvProcessingState;
 use crate::debug_message::print_debug_message;
 use crate::plot_structures::{Action, ActionPlotPoint, ErroneousAction, MissedAction, PeriodType, PlotLocation};
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use crate::detection::{can_mark_each_other, check_cpr, is_erroneous_action, is_error_action_marker, is_missed_action, is_stage_boundary, ERROR_MARKER_TIME_THRESHOLD};
 
 pub fn process_if_stage_boundary(stage_boundary_points: &mut Vec<PlotLocation>, csv_row: &ActionCsvRow) -> Option<Result<ActionPlotPoint, String>> {
     if !is_stage_boundary(csv_row) {

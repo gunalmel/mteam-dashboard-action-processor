@@ -32,7 +32,7 @@ pub fn validate_header(headers: &[&str], expected_headers: &[&str]) -> Result<()
     }
 }
 
-pub fn apply_validation<R: Read>(reader: &mut Reader<R>, validate: HeaderValidatorType) -> Result<(), String> {
+fn apply_validation<R: Read>(reader: &mut Reader<R>, validate: HeaderValidatorType) -> Result<(), String> {
     match reader.headers() {
         Ok(headers) => {
             let headers = headers.iter().collect::<Vec<_>>();

@@ -1,10 +1,12 @@
+mod parsing;
+mod detection;
 mod csv_reader;
 mod csv_row_processor;
-mod csv_processing_state;
-mod plot_point_processors;
+mod processing_state;
+mod plot_processors;
 mod action_csv_row;
-mod csv_row_utils;
+mod utils;
 pub mod debug_message;
 pub mod plot_structures;
-pub mod csv_processor;
+pub(crate) mod csv_processor;
 pub use csv_processor::process_csv;
