@@ -1,10 +1,10 @@
+use crate::action_csv_row::ActionCsvRow;
+use crate::csv_processing_state::CsvProcessingState;
+use crate::csv_row_utils::{can_mark_each_other, check_cpr, is_erroneous_action, is_error_action_marker, is_missed_action, is_stage_boundary, ERROR_MARKER_TIME_THRESHOLD};
+use crate::debug_message::print_debug_message;
+use crate::plot_structures::{Action, ActionPlotPoint, ErroneousAction, MissedAction, PeriodType, PlotLocation};
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use crate::action_csv_row::ActionCsvRow;
-use crate::debug_message::print_debug_message;
-use crate::scatter_points::{Action, ActionPlotPoint, ErroneousAction, MissedAction, PeriodType, PlotLocation};
-use crate::state_management::CsvProcessingState;
-use crate::util::{can_mark_each_other, check_cpr, is_erroneous_action, is_error_action_marker, is_missed_action, is_stage_boundary, merge_plot_location_range, ERROR_MARKER_TIME_THRESHOLD};
 
 pub fn process_if_stage_boundary(stage_boundary_points: &mut Vec<PlotLocation>, csv_row: &ActionCsvRow) -> Option<Result<ActionPlotPoint, String>> {
     if !is_stage_boundary(csv_row) {
@@ -23,27 +23,25 @@ pub fn process_if_stage_boundary(stage_boundary_points: &mut Vec<PlotLocation>, 
 
     Some(Ok(ActionPlotPoint::Period(
         PeriodType::Stage,
-        Some(start_location),
-        Some(PlotLocation::new(csv_row)),
+        start_location,
+        PlotLocation::new(csv_row), // No more Option here
     )))
 }
 
-pub fn process_cpr_lines(cpr_points: &mut Vec<ActionPlotPoint>, csv_row: &ActionCsvRow) -> Option<Result<ActionPlotPoint, String>> {
+pub fn process_cpr_lines(cpr_points: &mut Vec<(PlotLocation, PlotLocation)>, csv_row: &ActionCsvRow) -> Option<Result<ActionPlotPoint, String>> {
     match check_cpr(&csv_row) {
-        Some(cpr) => {
+        Some(_) => {
+            let location = PlotLocation::new(csv_row);
             match cpr_points.pop() {
                 Some(previous_cpr) => {
-                    Some(match merge_plot_location_range(Some(cpr), Some(previous_cpr)) {
-                        Ok(merged_cpr) => {
-                            Ok(merged_cpr)
-                        },
-                        Err(err_msg) => {
-                            Err(err_msg)
-                        }
-                    })
+                    // Merge logic. We assume the first location in previous_cpr is the start
+                    // and the current location is the end.
+                    Some(Ok(ActionPlotPoint::Period(PeriodType::CPR, previous_cpr.0, location)))
                 },
                 None => {
-                    cpr_points.push(cpr.clone());
+                    // Start of CPR, store both start and "end" as the current location,
+                    // end will be updated later.
+                    cpr_points.push((location.clone(), location));
                     None
                 }
             }

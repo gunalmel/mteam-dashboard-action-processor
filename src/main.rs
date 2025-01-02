@@ -3,7 +3,7 @@ use std::{
     io::{BufReader},
 };
 use mteam_dashboard_action_processor::process_csv;
-use mteam_dashboard_action_processor::scatter_points::{ActionPlotPoint, PeriodType};
+use mteam_dashboard_action_processor::plot_structures::{ActionPlotPoint, PeriodType};
 use mteam_dashboard_action_processor::debug_message::print_debug_message;
 // fn read_csv_file_from_input() -> String {
 //     println!("Enter the CSV file name:");

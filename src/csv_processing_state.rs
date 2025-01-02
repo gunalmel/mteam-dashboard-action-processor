@@ -1,13 +1,13 @@
-use std::collections::VecDeque;
-use std::cell::RefCell;
 use crate::action_csv_row::ActionCsvRow;
-use crate::scatter_points::{ActionPlotPoint, PlotLocation};
+use crate::plot_structures::PlotLocation;
+use std::cell::RefCell;
+use std::collections::VecDeque;
 
 pub struct CsvProcessingState {
     pub max_rows_to_check: usize,
     pub recent_rows: VecDeque<ActionCsvRow>,
     pub stage_boundaries: Vec<PlotLocation>,
-    pub cpr_points: Vec<ActionPlotPoint>,
+    pub cpr_points: Vec<(PlotLocation, PlotLocation)>,
     pub pending_error_marker: RefCell<Option<(usize, ActionCsvRow)>>,
 }
 

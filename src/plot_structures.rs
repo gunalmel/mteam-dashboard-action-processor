@@ -128,6 +128,6 @@ pub enum ActionPlotPoint {
     Error(ErroneousAction),
     Action(Action),
     MissedAction(MissedAction),
-    Period(PeriodType, Option<PlotLocation>, Option<PlotLocation>)
+    Period(PeriodType, PlotLocation, PlotLocation)
 }
 

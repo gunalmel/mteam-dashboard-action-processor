@@ -1,5 +1,5 @@
 use crate::action_csv_row::ActionCsvRow;
-use crate::scatter_points::{ActionPlotPoint, CsvRowTime, PeriodType, PlotLocation};
+use crate::plot_structures::{CsvRowTime, PlotLocation};
 use chrono::{Datelike, Utc};
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -133,39 +133,17 @@ pub fn is_missed_action(csv_row: &ActionCsvRow) -> bool {
     csv_row.old_value.trim() == "Error-Triggered" && 
     csv_row.score.trim() == "Action-Was-Not-Performed"
 }
-pub fn check_cpr(csv_row: &ActionCsvRow) -> Option<ActionPlotPoint> {
+pub fn check_cpr(csv_row: &ActionCsvRow) -> Option<(String, PlotLocation)> {
     let normalized_action_name = normalize_whitespace(csv_row.subaction_name.to_lowercase().as_str());
     if CPR_START_MARKERS.contains(&&*normalized_action_name) {
-        return Some(ActionPlotPoint::Period(PeriodType::CPR, Some(PlotLocation::new(csv_row)), None));
+        return Some((String::from("START"), PlotLocation::new(csv_row)));
     }
     else if CPR_END_MARKERS.contains(&&*normalized_action_name) {
-        return Some(ActionPlotPoint::Period(PeriodType::CPR, None, Some(PlotLocation::new(csv_row))));
+        return Some((String::from("END"), PlotLocation::new(csv_row)));
     }
     None
 }
-pub fn merge_plot_location_range(app1: Option<ActionPlotPoint>, app2: Option<ActionPlotPoint>)->Result<ActionPlotPoint, String> {
-    const ERR_MSG: &str = "Should have a begin and end point in order. Start/end markers are not encountered as expected for a valid range/duration.";
-    match (app1, app2) {
-        (Some(ActionPlotPoint::Period(period_type1, start1, end1)), Some(ActionPlotPoint::Period(period_type2, start2, end2))) => {
-            if period_type1 != period_type2 {
-                return Err("The periods you are trying to merge are of different types".to_string());
-            }
-            let merge = |pos1: Option<PlotLocation>, pos2: Option<PlotLocation>| -> Result<Option<PlotLocation>, String> {
-                match (pos1, pos2) {
-                    (None, None) => Ok(None),
-                    (Some(pos), None) | (None, Some(pos)) => Ok(Some(pos)),
-                    (Some(_), Some(_)) => Err(ERR_MSG.to_string()), // Overlap is not allowed
-                }
-            };
 
-            let start = merge(start1, start2)?;
-            let end = merge(end1, end2)?;
-
-            Ok(ActionPlotPoint::Period(period_type1, start, end))
-        }
-        _ => Err(ERR_MSG.to_string()),
-    }
-}
 pub fn can_mark_each_other(csv_row1: &ActionCsvRow, csv_row2: &ActionCsvRow) -> bool{
     let marker_time: u32 = csv_row1.timestamp.clone().unwrap_or(CsvRowTime::default()).total_seconds;
     let current_time: u32 = csv_row2.timestamp.clone().unwrap_or(CsvRowTime::default()).total_seconds;
@@ -198,18 +176,6 @@ pub fn process_action_name(input: &str) -> (String, String, String) {
 
     (corrected_action_name, category, joule)
 }
-
-// pub fn process_row(csv_row: &ActionCsvRow, buffer: &Vec<ActionCsvRow>, max_time_diff: NaiveTime) -> Option<ActionPlotPoint> {
-//    if csv_row.action_point{
-//        return Some(ActionPlotPoint::Action(ActionPoint{})
-//     }else if csv_row.stage_boundary{
-//        return Some(ActionPlotPoint::StageBoundary(csv_row))
-//     }else if csv_row.error_action_marker{
-//        return Some(ActionPlotPoint::ErrorActionMarker(csv_row))
-//     }else if csv_row.missed_action_marker{
-//        return Some(ActionPlotPoint::MissedAction(csv_row))
-//     }
-// }
 #[cfg(test)]
 mod tests {
     mod test_normalize_whitespace {
@@ -657,7 +623,7 @@ mod tests {
     mod test_can_mark_each_other {
         use super::super::*;
         use crate::action_csv_row::ActionCsvRow;
-        use crate::scatter_points::CsvRowTime;
+        use crate::plot_structures::CsvRowTime;
 
         #[test]
         fn within_threshold() {
@@ -781,7 +747,7 @@ mod tests {
     mod test_is_erroneous_action {
         use super::super::*;
         use crate::action_csv_row::ActionCsvRow;
-        use crate::scatter_points::CsvRowTime;
+        use crate::plot_structures::CsvRowTime;
 
         fn create_csv_row(time: u32) -> (u32, ActionCsvRow) {
             
@@ -900,7 +866,7 @@ mod tests {
     mod test_check_cpr{
         use super::super::*;
         use crate::action_csv_row::ActionCsvRow;
-        use crate::scatter_points::{CsvRowTime, PlotLocation};
+        use crate::plot_structures::{CsvRowTime, PlotLocation};
         #[test]
         fn is_beginning() {
             let expected_plot_location = PlotLocation {
@@ -917,7 +883,7 @@ mod tests {
                 subaction_name: "  BeGin   CpR  ".to_string(),
                 ..Default::default()
             };
-            let expected = Some(ActionPlotPoint::Period(PeriodType::CPR, Some(expected_plot_location), None));
+            let expected = Some((String::from("START"), expected_plot_location));
             assert_eq!(expected, check_cpr(&csv_row));
             csv_row.subaction_name = "  enteR   cPR  ".to_string();
             assert_eq!(expected, check_cpr(&csv_row));
@@ -943,7 +909,7 @@ mod tests {
                 subaction_name: "  Stop   CPR  ".to_string(),
                 ..Default::default()
             };
-            let expected = Some(ActionPlotPoint::Period(PeriodType::CPR, None, Some(expected_plot_location)));
+            let expected = Some((String::from("END"), expected_plot_location));
             assert_eq!(expected, check_cpr(&csv_row));
             csv_row.subaction_name = "  enD   cPR  ".to_string();
             assert_eq!(expected, check_cpr(&csv_row));
@@ -953,96 +919,7 @@ mod tests {
             assert_eq!(expected, check_cpr(&csv_row));
         }
     }
-    
-    mod test_merge_plot_location_range {
-        use crate::scatter_points::PeriodType;
-        use super::super::*;
-        #[test]
-        fn success() {
-            let plot_location1 = PlotLocation {
-                timestamp: CsvRowTime {
-                    total_seconds: 3600,
-                    date_string: "2024-12-24 01:00:00".to_string(),
-                    timestamp: "01:00:00".to_string(),
-                },
-                stage: (1, "Stage 1".to_string()),
-            };
-            let plot_location2 = PlotLocation {
-                timestamp: CsvRowTime {
-                    total_seconds: 3602,
-                    date_string: "2024-12-24 01:00:02".to_string(),
-                    timestamp: "01:00:02".to_string(),
-                },
-                stage: (2, "Stage 2".to_string()),
-            };
-
-            let period1 = ActionPlotPoint::Period(PeriodType::CPR, Some(plot_location1.clone()), None);
-            let period2 = ActionPlotPoint::Period(PeriodType::CPR, None, Some(plot_location2.clone()));
-
-            // Test merging with valid tuples
-            let mut actual = merge_plot_location_range(Some(period1.clone()), Some(period2.clone()));
-            assert_eq!(
-                Ok(ActionPlotPoint::Period(PeriodType::CPR, Some(plot_location1.clone()), Some(plot_location2.clone()))),
-                actual
-            );
-
-            // Test reversed inputs
-            actual = merge_plot_location_range(Some(period2), Some(period1));
-            assert_eq!(
-                Ok(ActionPlotPoint::Period(PeriodType::CPR, Some(plot_location1.clone()), Some(plot_location2.clone()))),
-                actual
-            );
-        }
-
-        #[test]
-        fn fail() {
-            let plot_location1 = PlotLocation {
-                timestamp: CsvRowTime {
-                    total_seconds: 3600,
-                    date_string: "2024-12-24 01:00:00".to_string(),
-                    timestamp: "01:00:00".to_string(),
-                },
-                stage: (1, "Stage 1".to_string()),
-            };
-            let plot_location2 = PlotLocation {
-                timestamp: CsvRowTime {
-                    total_seconds: 3602,
-                    date_string: "2024-12-24 01:00:02".to_string(),
-                    timestamp: "01:00:02".to_string(),
-                },
-                stage: (2, "Stage 2".to_string()),
-            };
-
-            let period1 = ActionPlotPoint::Period(PeriodType::CPR, Some(plot_location1.clone()), None);
-            let period2 = ActionPlotPoint::Period(PeriodType::CPR, Some(plot_location2.clone()), None);
-
-            // Test overlapping starts
-            let mut actual = merge_plot_location_range(Some(period1.clone()), Some(period2.clone()));
-            assert!(actual.is_err());
-
-            let period3 = ActionPlotPoint::Period(PeriodType::Stage, None, Some(plot_location1.clone()));
-            let period4 = ActionPlotPoint::Period(PeriodType::Stage, None, Some(plot_location2.clone()));
-
-            // Test overlapping ends
-            actual = merge_plot_location_range(Some(period3), Some(period4));
-            assert!(actual.is_err());
-
-            // Test both start and end overlap
-            let period5 = ActionPlotPoint::Period(PeriodType::Stage, Some(plot_location1.clone()), Some(plot_location2.clone()));
-            let period6 = ActionPlotPoint::Period(PeriodType::Stage, Some(plot_location2.clone()), Some(plot_location1.clone()));
-
-            actual = merge_plot_location_range(Some(period5), Some(period6));
-            assert!(actual.is_err());
-
-            // Test different types
-            let period7 = ActionPlotPoint::Period(PeriodType::Stage, Some(plot_location1.clone()), None);
-            let period8 = ActionPlotPoint::Period(PeriodType::CPR, None, Some(plot_location2.clone()));
-
-            actual = merge_plot_location_range(Some(period7), Some(period8));
-            assert!(actual.is_err());
-        }
-    }
-
+ 
     mod test_process_action_name {
         use super::super::*;
 
