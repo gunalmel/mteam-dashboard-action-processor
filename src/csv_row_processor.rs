@@ -2,7 +2,7 @@ use csv::StringRecord;
 use std::collections::VecDeque;
 use crate::action_csv_row::ActionCsvRow;
 use crate::debug_message::print_debug_message;
-use crate::plot_processors::{process_action_point, process_cpr_lines, process_erroneous_action, process_if_stage_boundary};
+use crate::plot_processors::{process_action_point, process_cpr_lines, process_erroneous_action, process_stage_boundary};
 use crate::plot_structures::ActionPlotPoint;
 use crate::processing_state::CsvProcessingState;
 
@@ -28,7 +28,7 @@ pub fn process_csv_row(
 
     update_recent_rows(&current_row, &mut state.recent_rows, state.max_rows_to_check);
 
-    process_if_stage_boundary(&mut state.stage_boundaries, &current_row)
+    process_stage_boundary(&mut state.stage_boundaries, &current_row)
         .or_else(|| process_cpr_lines(&mut state.cpr_points, &current_row))
         .or_else(|| process_erroneous_action(state, row_idx, &current_row))
         .or_else(|| process_action_point(&current_row))
