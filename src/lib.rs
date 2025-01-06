@@ -1,3 +1,4 @@
+mod input_sources;
 mod parsing;
 mod detection;
 mod csv_reader;
@@ -10,3 +11,8 @@ pub mod debug_message;
 pub mod plot_structures;
 pub(crate) mod csv_processor;
 pub use csv_processor::process_csv;
+use crate::plot_structures::ActionPlotPoint;
+
+pub fn process(src: &str) -> Box<dyn Iterator<Item = Result<ActionPlotPoint, String>>>{
+    process_csv(input_sources::create_reader(src).unwrap(), 10)
+}

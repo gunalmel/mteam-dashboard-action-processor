@@ -1,8 +1,8 @@
-use std::io::Read;
 use crate::csv_reader::initialize_csv_reader;
 use crate::csv_row_processor::process_csv_row;
 use crate::plot_structures::ActionPlotPoint;
 use crate::processing_state::CsvProcessingState;
+use std::io::Read;
 pub fn process_csv<'r, R>(
     reader: R,
     max_rows_to_check: usize,

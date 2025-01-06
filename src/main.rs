@@ -1,8 +1,8 @@
-use std::{
-    fs::File,
-    io::{BufReader},
-};
-use mteam_dashboard_action_processor::process_csv;
+// use std::{
+//     fs::File,
+//     io::{BufReader},
+// };
+use mteam_dashboard_action_processor::process;
 use mteam_dashboard_action_processor::plot_structures::{ActionPlotPoint, PeriodType};
 use mteam_dashboard_action_processor::debug_message::print_debug_message;
 // fn read_csv_file_from_input() -> String {
@@ -15,10 +15,11 @@ use mteam_dashboard_action_processor::debug_message::print_debug_message;
 fn main() {
     // let file_name = read_csv_file_from_input();
     let file_name = "timeline-multiplayer-09182024.csv";
-    match File::open(file_name) {
-        Ok(file) => {
-            let buffered = BufReader::new(file);
-           for (row_idx, result) in process_csv(buffered, 10).enumerate() {
+    let url = "https://dl.dropboxusercontent.com/scl/fi/6os941r9qnk19nkd22415/timeline-multiplayer-09182024.csv?rlkey=4lpfpmkf62fnua597t7bh3p17&st=1v2zw6n3&dl=0";
+    // match File::open(file_name) {
+    //     Ok(file) => {
+            // let buffered = BufReader::new(file);
+           for (row_idx, result) in process(url).enumerate() {
                let item_number = row_idx + 1;
                match result {
                   // Ok(_)=> { print_debug_message!("{}", item_number); },
@@ -36,9 +37,9 @@ fn main() {
                }
            }
         }
-        Err(e) => eprintln!("Error opening file: {}", e),
-    }
-}
+        // Err(e) => eprintln!("Error opening file: {}", e),
+    // }
+// }
 /*
 #[cfg(test)]
 mod tests {
