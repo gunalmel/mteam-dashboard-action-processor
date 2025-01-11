@@ -32,7 +32,7 @@ pub fn process_csv_row(
         .or_else(|| process_cpr_lines(&mut state.cpr_points, &current_row))
         .or_else(|| process_erroneous_action(state, row_idx, &current_row))
         .or_else(|| process_action_point(&current_row))
-        .or_else(|| log_skipped_row(row_idx))
+        // .or_else(|| log_skipped_row(row_idx))
 }
 
 fn update_recent_rows(current_row: &ActionCsvRow, recent_rows: &mut VecDeque<ActionCsvRow>, max_rows: usize) {

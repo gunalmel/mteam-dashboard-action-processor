@@ -1,7 +1,8 @@
 use crate::action_csv_row::ActionCsvRow;
 use chrono::{DateTime, Datelike, TimeZone, Utc};
+use serde::Serialize;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CsvRowTime {
     pub total_seconds: u32,
     pub date_string: String,
@@ -21,7 +22,7 @@ impl Default for CsvRowTime {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize)]
 pub struct PlotLocation {
     pub timestamp: CsvRowTime,
     pub stage: (u32, String)
@@ -36,8 +37,7 @@ impl PlotLocation {
     }
 }
 
-#[derive(Debug, PartialEq)]
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct ErrorInfo {
     pub action_rule: String,
     pub violation: String,
@@ -54,8 +54,7 @@ impl ErrorInfo {
     }
 }
 
-#[derive(Debug, Clone)]
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct Action {
     pub location: PlotLocation,
     pub name: String,
@@ -77,7 +76,7 @@ impl Action {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct ErroneousAction {
     pub location: PlotLocation,
     pub name: String,
@@ -98,10 +97,10 @@ impl ErroneousAction {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct MissedAction {
     pub location: PlotLocation,
-    pub action_name: String,
+    pub name: String,
     pub error_info: ErrorInfo
 }
 
@@ -109,21 +108,19 @@ impl MissedAction {
     pub(crate) fn new(row: &ActionCsvRow) -> MissedAction {
         MissedAction {
             location: PlotLocation::new(row),
-            action_name: row.action_vital_name.clone(),
+            name: row.action_vital_name.clone(),
             error_info: ErrorInfo::new(row)
         }
     }
 }
 
-#[derive(Debug)]
-#[derive(PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum PeriodType {
     CPR,
     Stage
 }
 
-#[derive(Debug)]
-#[derive(PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum ActionPlotPoint {
     Error(ErroneousAction),
     Action(Action),
