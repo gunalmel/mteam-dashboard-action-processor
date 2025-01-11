@@ -1,3 +1,4 @@
+use std::borrow::ToOwned;
 use crate::action_csv_row::ActionCsvRow;
 use crate::utils;
 use crate::plot_structures::{CsvRowTime, PlotLocation};
@@ -9,7 +10,9 @@ pub const ERROR_MARKER_TIME_THRESHOLD: u32 = 2;
 pub fn is_action_row(csv_row: &ActionCsvRow) -> bool {
     csv_row.parsed_stage.is_some() &&
         !csv_row.subaction_time.trim().is_empty() &&
-        !csv_row.subaction_name.is_empty()
+        !csv_row.subaction_name.is_empty() &&
+        !is_missed_action(csv_row) &&
+        csv_row.cpr_boundary.is_none()
 }
 
 pub fn is_stage_boundary(csv_row: &ActionCsvRow) -> bool {
@@ -21,6 +24,11 @@ pub fn is_stage_boundary(csv_row: &ActionCsvRow) -> bool {
         csv_row.new_value.is_empty()
 }
 
+pub fn cpr_boundary(csv_row: &ActionCsvRow) -> Option<String> {
+    let normalized_action_name = utils::normalize_whitespace(csv_row.subaction_name.to_lowercase().as_str());
+    if CPR_START_MARKERS.contains(&&*normalized_action_name) { Some("START".to_owned()) } else if
+        CPR_END_MARKERS.contains(&&*normalized_action_name) { Some("END".to_owned()) } else { None }
+}
 pub fn is_error_action_marker(csv_row: &ActionCsvRow) -> bool {
     csv_row.old_value.trim() == "Error-Triggered" &&
         csv_row.score.trim() == "Action-Was-Performed"
@@ -32,14 +40,9 @@ pub fn is_missed_action(csv_row: &ActionCsvRow) -> bool {
 }
 
 pub fn check_cpr(csv_row: &ActionCsvRow) -> Option<(String, PlotLocation)> {
-    let normalized_action_name = utils::normalize_whitespace(csv_row.subaction_name.to_lowercase().as_str());
-    if CPR_START_MARKERS.contains(&&*normalized_action_name) {
-        return Some((String::from("START"), PlotLocation::new(csv_row)));
-    }
-    else if CPR_END_MARKERS.contains(&&*normalized_action_name) {
-        return Some((String::from("END"), PlotLocation::new(csv_row)));
-    }
-    None
+    csv_row.cpr_boundary.clone().and_then(|cpr_boundary| {
+        Some((cpr_boundary, PlotLocation::new(csv_row)))
+    })
 }
 
 pub fn can_mark_each_other(csv_row1: &ActionCsvRow, csv_row2: &ActionCsvRow) -> bool{
@@ -99,6 +102,31 @@ mod tests {
                 parsed_stage: Some((1,"Action".to_string())),
                 subaction_time: "12:34".to_string(),
                 subaction_name: "".to_string(),
+                ..Default::default()
+            };
+            assert!(!is_action_row(&csv_row));
+        }
+
+        #[test]
+        fn is_false_missed_action() {
+            let csv_row = ActionCsvRow {
+                parsed_stage: Some((1,"Action".to_string())),
+                subaction_time: "12:34".to_string(),
+                subaction_name: "SubAction".to_string(),
+                old_value: "Error-Triggered".to_string(),
+                score: "Action-Was-Not-Performed".to_string(),
+                ..Default::default()
+            };
+            assert!(!is_action_row(&csv_row));
+        }
+
+        #[test]
+        fn is_false_cpr_boundary() {
+            let csv_row = ActionCsvRow {
+                parsed_stage: Some((1,"Action".to_string())),
+                subaction_time: "12:34".to_string(),
+                subaction_name: "SubAction".to_string(),
+                cpr_boundary: Some("START".to_string()),
                 ..Default::default()
             };
             assert!(!is_action_row(&csv_row));
@@ -191,6 +219,65 @@ mod tests {
                 ..Default::default()
             };
             assert!(!is_stage_boundary(&csv_row));
+        }
+    }
+
+    mod test_cpr_boundary {
+        use crate::action_csv_row::ActionCsvRow;
+        use crate::detection::cpr_boundary;
+
+        #[test]
+        fn is_start() {
+            let csv_row = ActionCsvRow {
+                subaction_name: "begin cpr".to_string(),
+                ..Default::default()
+            };
+            assert_eq!(cpr_boundary(&csv_row), Some("START".to_string()));
+        }
+
+        #[test]
+        fn is_end() {
+            let csv_row = ActionCsvRow {
+                subaction_name: "stop cpr".to_string(),
+                ..Default::default()
+            };
+            assert_eq!(cpr_boundary(&csv_row), Some("END".to_string()));
+        }
+
+        #[test]
+        fn is_none() {
+            let csv_row = ActionCsvRow {
+                subaction_name: "other action".to_string(),
+                ..Default::default()
+            };
+            assert_eq!(cpr_boundary(&csv_row), None);
+        }
+
+        #[test]
+        fn is_start_case_insensitive() {
+            let csv_row = ActionCsvRow {
+                subaction_name: "Begin CPR".to_string(),
+                ..Default::default()
+            };
+            assert_eq!(cpr_boundary(&csv_row), Some("START".to_string()));
+        }
+
+        #[test]
+        fn is_end_case_insensitive() {
+            let csv_row = ActionCsvRow {
+                subaction_name: "Stop CPR".to_string(),
+                ..Default::default()
+            };
+            assert_eq!(cpr_boundary(&csv_row), Some("END".to_string()));
+        }
+
+        #[test]
+        fn is_none_with_whitespace() {
+            let csv_row = ActionCsvRow {
+                subaction_name: "  begin cpr  ".to_string(),
+                ..Default::default()
+            };
+            assert_eq!(cpr_boundary(&csv_row), Some("START".to_string()));
         }
     }
 
@@ -308,6 +395,26 @@ mod tests {
         use crate::action_csv_row::ActionCsvRow;
         use crate::detection::check_cpr;
         use crate::plot_structures::{CsvRowTime, PlotLocation};
+
+        #[test]
+        fn is_none() {
+            let expected_plot_location = PlotLocation {
+                timestamp: CsvRowTime {
+                    total_seconds: 3600,
+                    date_string: "2024-12-24 01:00:00".to_string(),
+                    timestamp: "01:00:00".to_string(),
+                },
+                stage: (1,"Stage 1".to_string())
+            };
+            
+            let csv_row = ActionCsvRow {
+                timestamp: Some(expected_plot_location.timestamp),
+                parsed_stage: Some(expected_plot_location.stage),
+                ..Default::default()
+            };
+            
+            assert_eq!(None, check_cpr(&csv_row));
+        }
         #[test]
         fn is_beginning() {
             let expected_plot_location = PlotLocation {
@@ -318,19 +425,15 @@ mod tests {
                 },
                 stage: (1,"Stage 1".to_string())
             };
-            let mut csv_row = ActionCsvRow {
-                timestamp: expected_plot_location.timestamp.clone().into(),
-                parsed_stage: expected_plot_location.stage.clone().into(),
-                subaction_name: "  BeGin   CpR  ".to_string(),
+            let expected = Some((String::from("START"), expected_plot_location.clone()));
+           
+            let csv_row = ActionCsvRow {
+                timestamp: Some(expected_plot_location.timestamp),
+                parsed_stage: Some(expected_plot_location.stage),
+                cpr_boundary: Some("START".to_string()),
                 ..Default::default()
             };
-            let expected = Some((String::from("START"), expected_plot_location));
-            assert_eq!(expected, check_cpr(&csv_row));
-            csv_row.subaction_name = "  enteR   cPR  ".to_string();
-            assert_eq!(expected, check_cpr(&csv_row));
-            csv_row.subaction_name = "Begin CPR".to_string();
-            assert_eq!(expected, check_cpr(&csv_row));
-            csv_row.subaction_name = "Enter CPR".to_string();
+            
             assert_eq!(expected, check_cpr(&csv_row));
         }
 
@@ -344,19 +447,15 @@ mod tests {
                 },
                 stage: (1,"Stage 1".to_string())
             };
-            let mut csv_row = ActionCsvRow {
-                timestamp: expected_plot_location.timestamp.clone().into(),
-                parsed_stage: expected_plot_location.stage.clone().into(),
-                subaction_name: "  Stop   CPR  ".to_string(),
+            let expected = Some((String::from("END"), expected_plot_location.clone()));
+
+            let csv_row = ActionCsvRow {
+                timestamp: Some(expected_plot_location.timestamp),
+                parsed_stage: Some(expected_plot_location.stage),
+                cpr_boundary: Some("END".to_owned()),
                 ..Default::default()
             };
-            let expected = Some((String::from("END"), expected_plot_location));
-            assert_eq!(expected, check_cpr(&csv_row));
-            csv_row.subaction_name = "  enD   cPR  ".to_string();
-            assert_eq!(expected, check_cpr(&csv_row));
-            csv_row.subaction_name = "stoP CpR".to_string();
-            assert_eq!(expected, check_cpr(&csv_row));
-            csv_row.subaction_name = "End CPR".to_string();
+            
             assert_eq!(expected, check_cpr(&csv_row));
         }
     }
@@ -518,6 +617,7 @@ mod tests {
                 }),
                 ..Default::default()
             };
+            
             assert!(is_erroneous_action(&csv_row, &error_marker_row));
         }
 

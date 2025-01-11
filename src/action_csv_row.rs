@@ -1,4 +1,4 @@
-use crate::detection::is_action_row;
+use crate::detection::{cpr_boundary, is_action_row, is_missed_action};
 use crate::parsing::{extract_stage_name, parse_time, process_action_name};
 use crate::plot_structures::CsvRowTime;
 // This lets us write `#[derive(Deserialize)]`.
@@ -61,13 +61,15 @@ pub struct ActionCsvRow {
     pub shock_value: String,
     #[serde(skip)]
     pub action_point: bool,
+    #[serde(skip)]
+    pub cpr_boundary: Option<String>
 }
 
 impl Display for ActionCsvRow {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "ActionCsvRow {{ timestamp: {:?}, action_vital_name: {:?}, subaction_time: {:?}, subaction_name: {:?}, score: {:?}, old_value: {:?}, new_value: {:?}, username: {:?}, speech_command: {:?}, parsed_stage: {:?}, action_name: {:?}, action_category: {:?}, shock_value: {:?}, action_point: {:?}}}",
+            "ActionCsvRow {{ timestamp: {:?}, action_vital_name: {:?}, subaction_time: {:?}, subaction_name: {:?}, score: {:?}, old_value: {:?}, new_value: {:?}, username: {:?}, speech_command: {:?}, parsed_stage: {:?}, action_name: {:?}, action_category: {:?}, shock_value: {:?}, action_point: {:?}, cpr_boundary: {:?} }}",
             self.timestamp,
             self.action_vital_name,
             self.subaction_time,
@@ -81,14 +83,16 @@ impl Display for ActionCsvRow {
             self.action_name,
             self.action_category,
             self.shock_value,
-            self.action_point
+            self.action_point,
+            self.cpr_boundary
         )
     }
 }
 
 impl ActionCsvRow {
     pub fn post_deserialize(&mut self) {
-        self.parsed_stage = extract_stage_name(&self.action_vital_name);
+        self.parsed_stage = if is_missed_action(&self) {extract_stage_name(&self.username)} else { extract_stage_name(&self.action_vital_name) };
+        self.cpr_boundary = cpr_boundary(&self);
         self.action_point = is_action_row(&self);
         let processed_action_name = process_action_name(&self.subaction_name);
         self.action_name = processed_action_name.0;

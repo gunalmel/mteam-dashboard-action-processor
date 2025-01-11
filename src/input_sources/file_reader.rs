@@ -3,15 +3,13 @@ use std::io::{BufReader, Error as IoError};
 
 #[derive(Debug)]
 pub enum FileReaderError {
-    IoError(IoError),
-    CsvError(csv::Error),
+    IoError(IoError)
 }
 
 impl std::fmt::Display for FileReaderError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FileReaderError::IoError(e) => write!(f, "IO error: {}", e),
-            FileReaderError::CsvError(e) => write!(f, "CSV error: {}", e),
+            FileReaderError::IoError(e) => write!(f, "IO error: {}", e)
         }
     }
 }
@@ -63,7 +61,6 @@ mod tests {
             FileReaderError::IoError(e) => {
                 assert_eq!(e.kind(), std::io::ErrorKind::NotFound);
             }
-            _ => panic!("Expected IoError with NotFound kind"),
         }
         Ok(())
     }

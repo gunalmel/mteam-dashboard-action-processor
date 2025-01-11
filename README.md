@@ -1,10 +1,13 @@
 Repurpose https://docs.rs/csv/latest/csv/tutorial/index.html#reading-with-serde
 to process the mteam dashboard actions csv file using rust.
 
-The goal is to build a simple microservice that will read csv file over https, process and produce the data plotly needs.
+The goal is to use this project to build a simple web app that will read csv file over https, process and produce the data plotly needs.
 ```shell
 cargo build  
 ./target/debug/mteam-dashboard-action-processor timeline-multiplayer-09182024.csv
+#OR
+cargo run -- timeline-multiplayer-09182024.csv
+```
 #if you need tests to print to the console using println then use
 cargo test -- --nocapture
 ```

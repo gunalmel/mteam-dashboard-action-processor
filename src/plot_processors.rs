@@ -24,22 +24,34 @@ fn check_pending_erroneous_action_marker(pending_error_marker: &RefCell<Option<(
     None
 }
 
-fn seek_erroneous_action_in_visited_rows(visited_rows_buffer: &VecDeque<ActionCsvRow>, error_marker_row: &ActionCsvRow, error_marker_row_idx: usize) -> Option<Result<ActionPlotPoint, String>> {
-    for (recent_index, recent_row) in visited_rows_buffer.iter().rev().enumerate() {
-        if is_erroneous_action(recent_row, error_marker_row) {
-            print_debug_message!(
-                "Error marker at row {} points backward to erroneous action at row {}",
-                error_marker_row_idx + 2,
-                (error_marker_row_idx - recent_index) + 2
-            );
-            let point = ActionPlotPoint::Error(ErroneousAction::new(recent_row, error_marker_row));
-            return Some(Ok(point)); // Wrap in Ok to match PlotPointResult
+fn seek_erroneous_action_in_visited_rows(
+    visited_rows_buffer: &mut VecDeque<ActionCsvRow>,
+    error_marker_row: &ActionCsvRow,
+    error_marker_row_idx: usize,
+) -> Option<Result<ActionPlotPoint, String>> {
+    for recent_index in (0..visited_rows_buffer.len()).rev() {
+        if let Some(recent_row) = visited_rows_buffer.get(recent_index) {
+            if is_erroneous_action(recent_row, error_marker_row) {
+                print_debug_message!(
+                    "Error marker at row {} points backward to erroneous action at row {}",
+                    error_marker_row_idx + 2,
+                    (error_marker_row_idx - recent_index) + 2
+                );
+
+                // Remove the erroneous row from the buffer
+                let removed_row = visited_rows_buffer.remove(recent_index);
+
+                if let Some(removed_row) = removed_row {
+                    let point = ActionPlotPoint::Error(ErroneousAction::new(&removed_row, error_marker_row));
+                    return Some(Ok(point)); // Wrap in Ok to match PlotPointResult
+                }
+            }
         }
     }
     None
 }
 
-pub fn process_erroneous_action(state: &CsvProcessingState, row_idx: usize, current_row: &ActionCsvRow, ) -> Option<Result<ActionPlotPoint, String>> {
+pub fn process_erroneous_action(state: &mut CsvProcessingState, row_idx: usize, current_row: &ActionCsvRow, ) -> Option<Result<ActionPlotPoint, String>> {
     if let Some(error_point) = check_pending_erroneous_action_marker(
         &state.pending_error_marker,
         row_idx,
@@ -49,7 +61,7 @@ pub fn process_erroneous_action(state: &CsvProcessingState, row_idx: usize, curr
     }
 
     if is_error_action_marker(current_row) {
-        seek_erroneous_action_in_visited_rows(&state.recent_rows, current_row, row_idx)
+        seek_erroneous_action_in_visited_rows(&mut state.recent_rows, current_row, row_idx)
             .or_else(|| {
                 *state.pending_error_marker.borrow_mut() = Some((row_idx, current_row.clone()));
                 None
@@ -187,7 +199,7 @@ mod tests{
         fn start_cpr_period() {
             let mut cpr_points = Vec::new();
             let csv_row = ActionCsvRow {
-                subaction_name: "Begin CPR".to_string(),
+                cpr_boundary: Some("START".to_owned()),
                 // Add necessary fields to make check_cpr return Some value
                 timestamp: Some(CsvRowTime{
                     total_seconds:120,
@@ -207,14 +219,14 @@ mod tests{
         #[test]
         fn end_cpr_period() {
             let mut cpr_points = vec![(PlotLocation::new(&ActionCsvRow {
-                subaction_name: "End CPR".to_string(),
+                cpr_boundary: Some("END".to_owned()),
                 ..Default::default()
             }), PlotLocation::new(&ActionCsvRow {
-                subaction_name: "Begin CPR".to_string(),
+                cpr_boundary: Some("START".to_owned()),
                 ..Default::default()
             }))];
             let csv_row = ActionCsvRow {
-                subaction_name: "End CPR".to_string(),
+                cpr_boundary: Some("END".to_owned()),
                 timestamp: Some(CsvRowTime{
                     total_seconds:120,
                     timestamp: "00:02:00".to_string(),
@@ -289,6 +301,113 @@ mod tests{
     }
     
     mod process_erroneous_action {
+        
+    }
+    
+    mod seek_erroneous_action_in_visited_rows{
+        use super::super::*;
+        use std::collections::VecDeque;
+        use crate::plot_structures::CsvRowTime;
+
+        fn create_timestamp(sec: u32) -> Option<CsvRowTime> {
+            Some(CsvRowTime {
+                total_seconds: sec,
+                timestamp: "".to_string(),
+                date_string: "".to_string(),
+            })
+        }
+        fn create_test_row(sec: u32) -> ActionCsvRow {
+            ActionCsvRow {
+                timestamp: create_timestamp(sec),
+                action_vital_name: "User1".to_owned(),
+                subaction_time: "".to_owned(),
+                subaction_name: "".to_owned(),
+                old_value: "".to_owned(),
+                new_value: "".to_owned(),
+                username: "".to_owned(),
+                speech_command: "".to_owned(),
+                parsed_stage: None,
+                action_name: "Pulse Check".to_owned(),
+                action_point: true,
+                cpr_boundary: None,
+                ..Default::default()
+            }
+        }
+
+        fn create_error_marker_row(sec: u32) -> ActionCsvRow {
+            ActionCsvRow {
+                timestamp: create_timestamp(sec),
+                username: "User1".to_owned(),
+                action_name: "A".to_owned(),
+                ..Default::default()
+            }
+        }
+
+        #[test]
+        fn test_no_erroneous_action_in_buffer() {
+            let mut buffer = VecDeque::new();
+            buffer.push_back(create_test_row(1));
+            buffer.push_back(create_test_row(2));
+            let error_marker_row = create_error_marker_row(5);
+
+            let result = seek_erroneous_action_in_visited_rows(&mut buffer, &error_marker_row, 5);
+
+            assert!(result.is_none());
+            assert_eq!(buffer.len(), 2); // Buffer should remain unchanged
+        }
+
+        #[test]
+        fn test_erroneous_action_found() {
+            let mut buffer = VecDeque::new();
+            buffer.push_back(create_test_row(1));
+            let erroneous_row = create_test_row(2);
+            buffer.push_back(erroneous_row.clone());
+            let error_marker_row = create_error_marker_row(4);
+            
+            let result = seek_erroneous_action_in_visited_rows(&mut buffer, &error_marker_row, 5);
+
+            assert!(result.is_some());
+            if let Some(Ok(ActionPlotPoint::Error(erroneous_action))) = result {
+                assert_eq!(erroneous_action.location.timestamp, erroneous_row.timestamp.unwrap());
+            } else {
+                panic!("Expected Some(Ok(ActionPlotPoint::Error))");
+            }
+
+            assert_eq!(buffer.len(), 1); // Erroneous row should be removed
+            assert_eq!(buffer[0].clone().timestamp.unwrap().total_seconds, 1); // Ensure the remaining row is correct
+        }
+
+        #[test]
+        fn test_multiple_erroneous_rows() {
+            let mut buffer = VecDeque::new();
+            buffer.push_back(create_test_row(1));
+            buffer.push_back(create_test_row(2));
+            let most_recent_erroneous = create_test_row(3);
+            buffer.push_back(most_recent_erroneous.clone());
+            let error_marker_row = create_error_marker_row(5);
+
+            let result = seek_erroneous_action_in_visited_rows(&mut buffer, &error_marker_row, 5);
+
+            assert!(result.is_some());
+            if let Some(Ok(ActionPlotPoint::Error(erroneous_action))) = result {
+                assert_eq!(erroneous_action.location.timestamp.total_seconds, 3);
+            } else {
+                panic!("Expected Some(Ok(ActionPlotPoint::Error))");
+            }
+
+            assert_eq!(buffer.len(), 2); // Most recent erroneous row should be removed
+        }
+
+        #[test]
+        fn test_empty_buffer() {
+            let mut buffer: VecDeque<ActionCsvRow> = VecDeque::new();
+            let error_marker_row = create_error_marker_row(5);
+
+            let result = seek_erroneous_action_in_visited_rows(&mut buffer, &error_marker_row, 5);
+
+            assert!(result.is_none());
+            assert!(buffer.is_empty()); // Buffer should remain empty
+        }
         
     }
 }

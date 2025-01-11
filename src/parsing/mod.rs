@@ -66,36 +66,37 @@ pub fn extract_shock_value(input: &str) -> (String, String) {
         let value = captures.get(2).map_or("", |m| m.as_str()).trim();
         let after = captures.get(3).map_or("", |m| m.as_str()).trim();
 
-        (format!("{} {}", before, after).trim().to_string(), value.to_string())
+        (format!("{} {}", before, after).trim().to_owned(), value.to_owned())
     }){
         Some((action_name, joule)) => {
             if joule.is_empty() {
-                (action_name, "".to_string())
+                (action_name, "".to_owned())
             } else {
                 (action_name, joule)
             }
         },
-        None => (input.to_string(), "".to_string())
+        None => (input.to_owned(), "".to_owned())
     }
 }
 
 pub fn process_action_name(input: &str) -> (String, String, String) {
     let (normalized_action_name, joule) = extract_shock_value(utils::capitalize_words(input).replace("UNAVAILABLE", "").trim());
     let corrected_action_name = match normalized_action_name.as_str() {
-        "Ascultate Lungs" => "Auscultate Lungs".to_string(),
-        "SYNCHRONIZED Shock" => "Synchronized Shock".to_string(),
-        _ => normalized_action_name,
+        "Ascultate Lungs" => "Auscultate Lungs",
+        "SYNCHRONIZED Shock" => "Synchronized Shock",
+        _ => normalized_action_name.as_str(),
     };
 
-    let category = match corrected_action_name.as_str() {
-        "Select Amiodarone" => "Medication".to_string(),
-        "Select Calcium" => "Medication".to_string(),
-        "Select Epinephrine" => "Medication".to_string(),
-        "Select Lidocaine" => "Medication".to_string(),
-        _ => corrected_action_name.clone(),
+    let category = match corrected_action_name {
+        "Select Amiodarone" => "Medication",
+        "Select Calcium" => "Medication",
+        "Select Epinephrine" => "Medication",
+        "Select Lidocaine" => "Medication",
+        _ => corrected_action_name,
     };
 
-    (corrected_action_name, category, joule)
+    let action_name = if joule.is_empty() { corrected_action_name.to_owned() } else { format!("{} {}", corrected_action_name, joule) };
+    (action_name, category.to_owned(), joule)
 }
 
 #[cfg(test)]
@@ -137,7 +138,7 @@ mod tests {
         #[test]
         fn valid() {
             let input = "(123)example(action)";
-            let expected = Some((123, "example".to_string()));
+            let expected = Some((123, "example".to_owned()));
             assert_eq!(extract_stage_name(input), expected);
         }
 
@@ -165,7 +166,7 @@ mod tests {
         #[test]
         fn with_spaces() {
             let input = "  (123)   example   with spaces   (action)   ";
-            let expected = Some((123,"example with spaces".to_string()));
+            let expected = Some((123,"example with spaces".to_owned()));
             assert_eq!(extract_stage_name(input), expected);
         }
     }
@@ -175,62 +176,62 @@ mod tests {
 
         #[test]
         fn basic() {
-            assert_eq!(extract_shock_value("xyz rts 100J klm abc"), ("xyz rts klm abc".to_string(), "100J".to_string()));
+            assert_eq!(extract_shock_value("xyz rts 100J klm abc"), ("xyz rts klm abc".to_owned(), "100J".to_owned()));
         }
 
         #[test]
         fn lowercase_j() {
-            assert_eq!(extract_shock_value("xyz rts 100j klm abc"), ("xyz rts klm abc".to_string(), "100j".to_string()));
+            assert_eq!(extract_shock_value("xyz rts 100j klm abc"), ("xyz rts klm abc".to_owned(), "100j".to_owned()));
         }
 
         #[test]
         fn no_value() {
-            assert_eq!(extract_shock_value("no value here"), ("no value here".to_string(), "".to_string()));
+            assert_eq!(extract_shock_value("no value here"), ("no value here".to_owned(), "".to_owned()));
         }
 
         #[test]
         fn at_beginning() {
-            assert_eq!(extract_shock_value("123J at the beginning"), ("at the beginning".to_string(), "123J".to_string()));
+            assert_eq!(extract_shock_value("123J at the beginning"), ("at the beginning".to_owned(), "123J".to_owned()));
         }
 
         #[test]
         fn at_end() {
-            assert_eq!(extract_shock_value("at the end 456j"), ("at the end".to_string(), "456j".to_string()));
+            assert_eq!(extract_shock_value("at the end 456j"), ("at the end".to_owned(), "456j".to_owned()));
         }
 
         #[test]
         fn multiple_values() {
-            assert_eq!(extract_shock_value("multiple 789J values 123j in string"), ("multiple values 123j in string".to_string(), "789J".to_string()));
+            assert_eq!(extract_shock_value("multiple 789J values 123j in string"), ("multiple values 123j in string".to_owned(), "789J".to_owned()));
         }
 
         #[test]
         fn leading_trailing_spaces() {
-            assert_eq!(extract_shock_value(" leading and trailing spaces 100J "), ("leading and trailing spaces".to_string(), "100J".to_string()));
+            assert_eq!(extract_shock_value(" leading and trailing spaces 100J "), ("leading and trailing spaces".to_owned(), "100J".to_owned()));
         }
 
         #[test]
         fn only_value() {
-            assert_eq!(extract_shock_value("100J"), ("".to_string(), "100J".to_string()));
+            assert_eq!(extract_shock_value("100J"), ("".to_owned(), "100J".to_owned()));
         }
 
         #[test]
         fn with_spaces_around() {
-            assert_eq!(extract_shock_value("test   100J   test"), ("test test".to_string(), "100J".to_string()));
+            assert_eq!(extract_shock_value("test   100J   test"), ("test test".to_owned(), "100J".to_owned()));
         }
 
         #[test]
         fn no_letters_around_value() {
-            assert_eq!(extract_shock_value("100Jtest"), ("100Jtest".to_string(), "".to_string()));
+            assert_eq!(extract_shock_value("100Jtest"), ("100Jtest".to_owned(), "".to_owned()));
         }
 
         #[test]
         fn at_the_very_end() {
-            assert_eq!(extract_shock_value("test 100J"), ("test".to_string(), "100J".to_string()));
+            assert_eq!(extract_shock_value("test 100J"), ("test".to_owned(), "100J".to_owned()));
         }
 
         #[test]
         fn at_the_very_beginning() {
-            assert_eq!(extract_shock_value("100J test"), ("test".to_string(), "100J".to_string()));
+            assert_eq!(extract_shock_value("100J test"), ("test".to_owned(), "100J".to_owned()));
         }
     }
 
@@ -240,33 +241,33 @@ mod tests {
         #[test]
         fn process_action_names() {
             let test_cases = [
-                ("Ascultate Lungs", ("Auscultate Lungs".to_string(), "Auscultate Lungs".to_string(), "".to_string())),
-                ("Auscultate Lungs", ("Auscultate Lungs".to_string(), "Auscultate Lungs".to_string(), "".to_string())),
-                ("Check Lab Tests", ("Check Lab Tests".to_string(), "Check Lab Tests".to_string(), "".to_string())),
-                ("Defib (UNsynchronized Shock) 100J", ("Defib (Unsynchronized Shock)".to_string(), "Defib (Unsynchronized Shock)".to_string(), "100J".to_string())),
-                ("Defib (UNsynchronized Shock) 200J", ("Defib (Unsynchronized Shock)".to_string(), "Defib (Unsynchronized Shock)".to_string(), "200J".to_string())),
-                ("Defib (UNsynchronized Shock) 300J", ("Defib (Unsynchronized Shock)".to_string(), "Defib (Unsynchronized Shock)".to_string(), "300J".to_string())),
-                ("Insert Bag Mask", ("Insert Bag Mask".to_string(), "Insert Bag Mask".to_string(), "".to_string())),
-                ("Insert Lactated Ringers (1 Liter)", ("Insert Lactated Ringers (1 Liter)".to_string(), "Insert Lactated Ringers (1 Liter)".to_string(), "".to_string())),
-                ("Insert Syringe on Right Hand", ("Insert Syringe On Right Hand".to_string(), "Insert Syringe On Right Hand".to_string(), "".to_string())),
-                ("Measure Glucose Level", ("Measure Glucose Level".to_string(), "Measure Glucose Level".to_string(), "".to_string())),
-                ("Order Chest X-ray", ("Order Chest X-ray".to_string(), "Order Chest X-ray".to_string(), "".to_string())),
-                ("Order Cooling", ("Order Cooling".to_string(), "Order Cooling".to_string(), "".to_string())),
-                ("Order EKG", ("Order EKG".to_string(), "Order EKG".to_string(), "".to_string())),
-                ("Order Intubation", ("Order Intubation".to_string(), "Order Intubation".to_string(), "".to_string())),
-                ("Order Needle Thoracostomy", ("Order Needle Thoracostomy".to_string(), "Order Needle Thoracostomy".to_string(), "".to_string())),
-                ("Order new Labs UNAVAILABLE", ("Order New Labs".to_string(), "Order New Labs".to_string(), "".to_string())),
-                ("Order Pericardiocentesis", ("Order Pericardiocentesis".to_string(), "Order Pericardiocentesis".to_string(), "".to_string())),
-                ("Order Ultrasound", ("Order Ultrasound".to_string(), "Order Ultrasound".to_string(), "".to_string())),
-                ("Perform Bag Mask Pump", ("Perform Bag Mask Pump".to_string(), "Perform Bag Mask Pump".to_string(), "".to_string())),
-                ("Pulse Check", ("Pulse Check".to_string(), "Pulse Check".to_string(), "".to_string())),
-                ("Select Amiodarone", ("Select Amiodarone".to_string(), "Medication".to_string(), "".to_string())),
-                ("Select Calcium", ("Select Calcium".to_string(), "Medication".to_string(), "".to_string())),
-                ("Select Epinephrine", ("Select Epinephrine".to_string(), "Medication".to_string(), "".to_string())),
-                ("Select Lidocaine", ("Select Lidocaine".to_string(), "Medication".to_string(), "".to_string())),
-                ("SYNCHRONIZED Shock 100J", ("Synchronized Shock".to_string(), "Synchronized Shock".to_string(), "100J".to_string())),
-                ("SYNCHRONIZED Shock 200J", ("Synchronized Shock".to_string(), "Synchronized Shock".to_string(), "200J".to_string())),
-                ("View Cardiac Arrest Guidelines", ("View Cardiac Arrest Guidelines".to_string(), "View Cardiac Arrest Guidelines".to_string(), "".to_string())),
+                ("Ascultate Lungs", ("Auscultate Lungs".to_owned(), "Auscultate Lungs".to_owned(), "".to_owned())),
+                ("Auscultate Lungs", ("Auscultate Lungs".to_owned(), "Auscultate Lungs".to_owned(), "".to_owned())),
+                ("Check Lab Tests", ("Check Lab Tests".to_owned(), "Check Lab Tests".to_owned(), "".to_owned())),
+                ("Defib (UNsynchronized Shock) 100J", ("Defib (Unsynchronized Shock) 100J".to_owned(), "Defib (Unsynchronized Shock)".to_owned(), "100J".to_owned())),
+                ("Defib (UNsynchronized Shock) 200J", ("Defib (Unsynchronized Shock) 200J".to_owned(), "Defib (Unsynchronized Shock)".to_owned(), "200J".to_owned())),
+                ("Defib (UNsynchronized Shock) 300J", ("Defib (Unsynchronized Shock) 300J".to_owned(), "Defib (Unsynchronized Shock)".to_owned(), "300J".to_owned())),
+                ("Insert Bag Mask", ("Insert Bag Mask".to_owned(), "Insert Bag Mask".to_owned(), "".to_owned())),
+                ("Insert Lactated Ringers (1 Liter)", ("Insert Lactated Ringers (1 Liter)".to_owned(), "Insert Lactated Ringers (1 Liter)".to_owned(), "".to_owned())),
+                ("Insert Syringe on Right Hand", ("Insert Syringe On Right Hand".to_owned(), "Insert Syringe On Right Hand".to_owned(), "".to_owned())),
+                ("Measure Glucose Level", ("Measure Glucose Level".to_owned(), "Measure Glucose Level".to_owned(), "".to_owned())),
+                ("Order Chest X-ray", ("Order Chest X-ray".to_owned(), "Order Chest X-ray".to_owned(), "".to_owned())),
+                ("Order Cooling", ("Order Cooling".to_owned(), "Order Cooling".to_owned(), "".to_owned())),
+                ("Order EKG", ("Order EKG".to_owned(), "Order EKG".to_owned(), "".to_owned())),
+                ("Order Intubation", ("Order Intubation".to_owned(), "Order Intubation".to_owned(), "".to_owned())),
+                ("Order Needle Thoracostomy", ("Order Needle Thoracostomy".to_owned(), "Order Needle Thoracostomy".to_owned(), "".to_owned())),
+                ("Order new Labs UNAVAILABLE", ("Order New Labs".to_owned(), "Order New Labs".to_owned(), "".to_owned())),
+                ("Order Pericardiocentesis", ("Order Pericardiocentesis".to_owned(), "Order Pericardiocentesis".to_owned(), "".to_owned())),
+                ("Order Ultrasound", ("Order Ultrasound".to_owned(), "Order Ultrasound".to_owned(), "".to_owned())),
+                ("Perform Bag Mask Pump", ("Perform Bag Mask Pump".to_owned(), "Perform Bag Mask Pump".to_owned(), "".to_owned())),
+                ("Pulse Check", ("Pulse Check".to_owned(), "Pulse Check".to_owned(), "".to_owned())),
+                ("Select Amiodarone", ("Select Amiodarone".to_owned(), "Medication".to_owned(), "".to_owned())),
+                ("Select Calcium", ("Select Calcium".to_owned(), "Medication".to_owned(), "".to_owned())),
+                ("Select Epinephrine", ("Select Epinephrine".to_owned(), "Medication".to_owned(), "".to_owned())),
+                ("Select Lidocaine", ("Select Lidocaine".to_owned(), "Medication".to_owned(), "".to_owned())),
+                ("SYNCHRONIZED Shock 100J", ("Synchronized Shock 100J".to_owned(), "Synchronized Shock".to_owned(), "100J".to_owned())),
+                ("SYNCHRONIZED Shock 200J", ("Synchronized Shock 200J".to_owned(), "Synchronized Shock".to_owned(), "200J".to_owned())),
+                ("View Cardiac Arrest Guidelines", ("View Cardiac Arrest Guidelines".to_owned(), "View Cardiac Arrest Guidelines".to_owned(), "".to_owned())),
             ];
 
             for (input, expected) in test_cases {

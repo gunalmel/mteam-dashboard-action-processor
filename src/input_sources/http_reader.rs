@@ -1,21 +1,17 @@
 use reqwest::blocking::Client;
-use std::io::{BufReader, Cursor, Error as IoError};
+use std::io::{BufReader, Cursor};
 
 #[derive(Debug)]
 pub(crate) enum HttpReaderError {
     RequestError(reqwest::Error),
-    IoError(IoError),
-    HttpStatusError(reqwest::StatusCode),
-    CsvError(csv::Error), // Add CsvError variant
+    HttpStatusError(reqwest::StatusCode)
 }
 
 impl std::fmt::Display for HttpReaderError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             HttpReaderError::RequestError(e) => write!(f, "Request error: {}", e),
-            HttpReaderError::IoError(e) => write!(f, "IO error: {}", e),
             HttpReaderError::HttpStatusError(status) => write!(f, "HTTP status error: {}", status),
-            HttpReaderError::CsvError(e) => write!(f, "CSV error: {}", e),
         }
     }
 }
