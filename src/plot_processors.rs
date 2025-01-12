@@ -137,8 +137,8 @@ mod tests{
             let mut stage_boundary_points = Vec::new();
             
             let csv_row = ActionCsvRow {
-                action_vital_name: "Stage 1".to_string(),
-                parsed_stage: Some((1, "Stage 1".to_string())),
+                action_vital_name: "Stage 1".to_owned(),
+                parsed_stage: Some((1, "Stage 1".to_owned())),
                 ..Default::default()
             };
 
@@ -146,8 +146,8 @@ mod tests{
             
             assert!(result.is_some());
             if let Some(Ok(ActionPlotPoint::Period(PeriodType::Stage, start, end))) = result {
-                assert_eq!(start.stage, (1, "Stage 1".to_string()));
-                assert_eq!(end.stage, (1, "Stage 1".to_string()));
+                assert_eq!(start.stage, (1, "Stage 1".to_owned()));
+                assert_eq!(end.stage, (1, "Stage 1".to_owned()));
             } else {
                 panic!("Expected ActionPlotPoint::Period with PeriodType::Stage");
             }
@@ -156,13 +156,13 @@ mod tests{
         #[test]
         fn stage_end() {
             let mut stage_boundary_points = vec![PlotLocation::new(&ActionCsvRow {
-                action_vital_name: "Stage 1".to_string(),
-                parsed_stage: Some((1, "Stage 1".to_string())),
+                action_vital_name: "Stage 1".to_owned(),
+                parsed_stage: Some((1, "Stage 1".to_owned())),
                 ..Default::default()
             })];
             let csv_row = ActionCsvRow {
-                action_vital_name: "Stage 2".to_string(),
-                parsed_stage: Some((2, "Stage 2".to_string())),
+                action_vital_name: "Stage 2".to_owned(),
+                parsed_stage: Some((2, "Stage 2".to_owned())),
                 ..Default::default()
             };
 
@@ -170,8 +170,8 @@ mod tests{
            
             assert!(result.is_some());
             if let Some(Ok(ActionPlotPoint::Period(PeriodType::Stage, start, end))) = result {
-                assert_eq!(start.stage, (2, "Stage 2".to_string()));
-                assert_eq!(end.stage, (2, "Stage 2".to_string()));
+                assert_eq!(start.stage, (2, "Stage 2".to_owned()));
+                assert_eq!(end.stage, (2, "Stage 2".to_owned()));
             } else {
                 panic!("Expected ActionPlotPoint::Period with PeriodType::Stage");
             }
@@ -181,7 +181,7 @@ mod tests{
         fn not_stage_boundary() {
             let mut stage_boundary_points = Vec::new();
             let csv_row = ActionCsvRow {
-                action_vital_name: "Not a stage boundary".to_string(),
+                action_vital_name: "Not a stage boundary".to_owned(),
                 parsed_stage: None,
                 ..Default::default()
             };
@@ -203,8 +203,8 @@ mod tests{
                 // Add necessary fields to make check_cpr return Some value
                 timestamp: Some(CsvRowTime{
                     total_seconds:120,
-                    timestamp: "00:02:00".to_string(),
-                    date_string: "2021-01-01 00:02:00".to_string(),
+                    timestamp: "00:02:00".to_owned(),
+                    date_string: "2021-01-01 00:02:00".to_owned(),
                 }),
                 ..Default::default()
             };
@@ -229,8 +229,8 @@ mod tests{
                 cpr_boundary: Some("END".to_owned()),
                 timestamp: Some(CsvRowTime{
                     total_seconds:120,
-                    timestamp: "00:02:00".to_string(),
-                    date_string: "2021-01-01 00:02:00".to_string(),
+                    timestamp: "00:02:00".to_owned(),
+                    date_string: "2021-01-01 00:02:00".to_owned(),
                 }),
                 ..Default::default()
             };
@@ -250,7 +250,7 @@ mod tests{
         fn non_cpr_row() {
             let mut cpr_points = Vec::new();
             let csv_row = ActionCsvRow {
-                action_vital_name: "Non-CPR".to_string(),
+                action_vital_name: "Non-CPR".to_owned(),
                 // Add necessary fields to make check_cpr return None
                 ..Default::default()
             };
@@ -271,8 +271,8 @@ mod tests{
         fn action_point() {
             let csv_row = ActionCsvRow {
                 action_point: true,
-                action_name: "Action Point".to_string(),
-                action_vital_name: "Action Point".to_string(),
+                action_name: "Action Point".to_owned(),
+                action_vital_name: "Action Point".to_owned(),
                 ..Default::default()
             };
 
@@ -290,7 +290,7 @@ mod tests{
         fn not_action_point() {
             let csv_row = ActionCsvRow {
                 action_point: false,
-                action_vital_name: "Not an Action Point".to_string(),
+                action_vital_name: "Not an Action Point".to_owned(),
                 ..Default::default()
             };
 
@@ -303,7 +303,7 @@ mod tests{
     mod process_erroneous_action {
         
     }
-    
+
     mod seek_erroneous_action_in_visited_rows{
         use super::super::*;
         use std::collections::VecDeque;
@@ -312,8 +312,8 @@ mod tests{
         fn create_timestamp(sec: u32) -> Option<CsvRowTime> {
             Some(CsvRowTime {
                 total_seconds: sec,
-                timestamp: "".to_string(),
-                date_string: "".to_string(),
+                timestamp: "".to_owned(),
+                date_string: "".to_owned(),
             })
         }
         fn create_test_row(sec: u32) -> ActionCsvRow {
@@ -363,7 +363,7 @@ mod tests{
             let erroneous_row = create_test_row(2);
             buffer.push_back(erroneous_row.clone());
             let error_marker_row = create_error_marker_row(4);
-            
+
             let result = seek_erroneous_action_in_visited_rows(&mut buffer, &error_marker_row, 5);
 
             assert!(result.is_some());
@@ -408,6 +408,6 @@ mod tests{
             assert!(result.is_none());
             assert!(buffer.is_empty()); // Buffer should remain empty
         }
-        
+
     }
 }

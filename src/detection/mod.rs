@@ -66,9 +66,9 @@ mod tests {
         #[test]
         fn is_true() {
             let csv_row = ActionCsvRow {
-                parsed_stage: Some((1,"Action".to_string())),
-                subaction_time: "12:34".to_string(),
-                subaction_name: "SubAction".to_string(),
+                parsed_stage: Some((1,"Action".to_owned())),
+                subaction_time: "12:34".to_owned(),
+                subaction_name: "SubAction".to_owned(),
                 ..Default::default()
             };
             assert!(is_action_row(&csv_row));
@@ -78,8 +78,8 @@ mod tests {
         fn is_false_no_parsed_action_name() {
             let csv_row = ActionCsvRow {
                 parsed_stage: None,
-                subaction_time: "12:34".to_string(),
-                subaction_name: "SubAction".to_string(),
+                subaction_time: "12:34".to_owned(),
+                subaction_name: "SubAction".to_owned(),
                 ..Default::default()
             };
             assert!(!is_action_row(&csv_row));
@@ -88,9 +88,9 @@ mod tests {
         #[test]
         fn is_false_empty_subaction_time() {
             let csv_row = ActionCsvRow {
-                parsed_stage: Some((1,"Action".to_string())),
-                subaction_time: "".to_string(),
-                subaction_name: "SubAction".to_string(),
+                parsed_stage: Some((1,"Action".to_owned())),
+                subaction_time: "".to_owned(),
+                subaction_name: "SubAction".to_owned(),
                 ..Default::default()
             };
             assert!(!is_action_row(&csv_row));
@@ -99,9 +99,9 @@ mod tests {
         #[test]
         fn is_false_empty_subaction_name() {
             let csv_row = ActionCsvRow {
-                parsed_stage: Some((1,"Action".to_string())),
-                subaction_time: "12:34".to_string(),
-                subaction_name: "".to_string(),
+                parsed_stage: Some((1,"Action".to_owned())),
+                subaction_time: "12:34".to_owned(),
+                subaction_name: "".to_owned(),
                 ..Default::default()
             };
             assert!(!is_action_row(&csv_row));
@@ -110,11 +110,11 @@ mod tests {
         #[test]
         fn is_false_missed_action() {
             let csv_row = ActionCsvRow {
-                parsed_stage: Some((1,"Action".to_string())),
-                subaction_time: "12:34".to_string(),
-                subaction_name: "SubAction".to_string(),
-                old_value: "Error-Triggered".to_string(),
-                score: "Action-Was-Not-Performed".to_string(),
+                parsed_stage: Some((1,"Action".to_owned())),
+                subaction_time: "12:34".to_owned(),
+                subaction_name: "SubAction".to_owned(),
+                old_value: "Error-Triggered".to_owned(),
+                score: "Action-Was-Not-Performed".to_owned(),
                 ..Default::default()
             };
             assert!(!is_action_row(&csv_row));
@@ -123,10 +123,10 @@ mod tests {
         #[test]
         fn is_false_cpr_boundary() {
             let csv_row = ActionCsvRow {
-                parsed_stage: Some((1,"Action".to_string())),
-                subaction_time: "12:34".to_string(),
-                subaction_name: "SubAction".to_string(),
-                cpr_boundary: Some("START".to_string()),
+                parsed_stage: Some((1,"Action".to_owned())),
+                subaction_time: "12:34".to_owned(),
+                subaction_name: "SubAction".to_owned(),
+                cpr_boundary: Some("START".to_owned()),
                 ..Default::default()
             };
             assert!(!is_action_row(&csv_row));
@@ -140,12 +140,12 @@ mod tests {
         #[test]
         fn is_true() {
             let csv_row = ActionCsvRow {
-                parsed_stage: Some((1,"Action".to_string())),
-                subaction_time: "".to_string(),
-                subaction_name: "".to_string(),
-                score: "".to_string(),
-                old_value: "".to_string(),
-                new_value: "".to_string(),
+                parsed_stage: Some((1,"Action".to_owned())),
+                subaction_time: "".to_owned(),
+                subaction_name: "".to_owned(),
+                score: "".to_owned(),
+                old_value: "".to_owned(),
+                new_value: "".to_owned(),
                 ..Default::default()
             };
             assert!(is_stage_boundary(&csv_row));
@@ -154,12 +154,12 @@ mod tests {
         #[test]
         fn is_false_non_empty_subaction_time() {
             let csv_row = ActionCsvRow {
-                parsed_stage: Some((1,"Action".to_string())),
-                subaction_time: "12:34".to_string(),
-                subaction_name: "".to_string(),
-                score: "".to_string(),
-                old_value: "".to_string(),
-                new_value: "".to_string(),
+                parsed_stage: Some((1,"Action".to_owned())),
+                subaction_time: "12:34".to_owned(),
+                subaction_name: "".to_owned(),
+                score: "".to_owned(),
+                old_value: "".to_owned(),
+                new_value: "".to_owned(),
                 ..Default::default()
             };
             assert!(!is_stage_boundary(&csv_row));
@@ -168,12 +168,12 @@ mod tests {
         #[test]
         fn is_false_non_empty_subaction_name() {
             let csv_row = ActionCsvRow {
-                parsed_stage: Some((1,"Action".to_string())),
-                subaction_time: "".to_string(),
-                subaction_name: "SubAction".to_string(),
-                score: "".to_string(),
-                old_value: "".to_string(),
-                new_value: "".to_string(),
+                parsed_stage: Some((1,"Action".to_owned())),
+                subaction_time: "".to_owned(),
+                subaction_name: "SubAction".to_owned(),
+                score: "".to_owned(),
+                old_value: "".to_owned(),
+                new_value: "".to_owned(),
                 ..Default::default()
             };
             assert!(!is_stage_boundary(&csv_row));
@@ -182,12 +182,12 @@ mod tests {
         #[test]
         fn is_false_non_empty_score() {
             let csv_row = ActionCsvRow {
-                parsed_stage: Some((1,"Action".to_string())),
-                subaction_time: "".to_string(),
-                subaction_name: "".to_string(),
-                score: "Score".to_string(),
-                old_value: "".to_string(),
-                new_value: "".to_string(),
+                parsed_stage: Some((1,"Action".to_owned())),
+                subaction_time: "".to_owned(),
+                subaction_name: "".to_owned(),
+                score: "Score".to_owned(),
+                old_value: "".to_owned(),
+                new_value: "".to_owned(),
                 ..Default::default()
             };
             assert!(!is_stage_boundary(&csv_row));
@@ -196,12 +196,12 @@ mod tests {
         #[test]
         fn is_false_non_empty_old_value() {
             let csv_row = ActionCsvRow {
-                parsed_stage: Some((1,"Action".to_string())),
-                subaction_time: "".to_string(),
-                subaction_name: "".to_string(),
-                score: "".to_string(),
-                old_value: "OldValue".to_string(),
-                new_value: "".to_string(),
+                parsed_stage: Some((1,"Action".to_owned())),
+                subaction_time: "".to_owned(),
+                subaction_name: "".to_owned(),
+                score: "".to_owned(),
+                old_value: "OldValue".to_owned(),
+                new_value: "".to_owned(),
                 ..Default::default()
             };
             assert!(!is_stage_boundary(&csv_row));
@@ -210,12 +210,12 @@ mod tests {
         #[test]
         fn is_false_non_empty_new_value() {
             let csv_row = ActionCsvRow {
-                parsed_stage: Some((1,"Action".to_string())),
-                subaction_time: "".to_string(),
-                subaction_name: "".to_string(),
-                score: "".to_string(),
-                old_value: "".to_string(),
-                new_value: "NewValue".to_string(),
+                parsed_stage: Some((1,"Action".to_owned())),
+                subaction_time: "".to_owned(),
+                subaction_name: "".to_owned(),
+                score: "".to_owned(),
+                old_value: "".to_owned(),
+                new_value: "NewValue".to_owned(),
                 ..Default::default()
             };
             assert!(!is_stage_boundary(&csv_row));
@@ -229,25 +229,25 @@ mod tests {
         #[test]
         fn is_start() {
             let csv_row = ActionCsvRow {
-                subaction_name: "begin cpr".to_string(),
+                subaction_name: "begin cpr".to_owned(),
                 ..Default::default()
             };
-            assert_eq!(cpr_boundary(&csv_row), Some("START".to_string()));
+            assert_eq!(cpr_boundary(&csv_row), Some("START".to_owned()));
         }
 
         #[test]
         fn is_end() {
             let csv_row = ActionCsvRow {
-                subaction_name: "stop cpr".to_string(),
+                subaction_name: "stop cpr".to_owned(),
                 ..Default::default()
             };
-            assert_eq!(cpr_boundary(&csv_row), Some("END".to_string()));
+            assert_eq!(cpr_boundary(&csv_row), Some("END".to_owned()));
         }
 
         #[test]
         fn is_none() {
             let csv_row = ActionCsvRow {
-                subaction_name: "other action".to_string(),
+                subaction_name: "other action".to_owned(),
                 ..Default::default()
             };
             assert_eq!(cpr_boundary(&csv_row), None);
@@ -256,28 +256,28 @@ mod tests {
         #[test]
         fn is_start_case_insensitive() {
             let csv_row = ActionCsvRow {
-                subaction_name: "Begin CPR".to_string(),
+                subaction_name: "Begin CPR".to_owned(),
                 ..Default::default()
             };
-            assert_eq!(cpr_boundary(&csv_row), Some("START".to_string()));
+            assert_eq!(cpr_boundary(&csv_row), Some("START".to_owned()));
         }
 
         #[test]
         fn is_end_case_insensitive() {
             let csv_row = ActionCsvRow {
-                subaction_name: "Stop CPR".to_string(),
+                subaction_name: "Stop CPR".to_owned(),
                 ..Default::default()
             };
-            assert_eq!(cpr_boundary(&csv_row), Some("END".to_string()));
+            assert_eq!(cpr_boundary(&csv_row), Some("END".to_owned()));
         }
 
         #[test]
         fn is_none_with_whitespace() {
             let csv_row = ActionCsvRow {
-                subaction_name: "  begin cpr  ".to_string(),
+                subaction_name: "  begin cpr  ".to_owned(),
                 ..Default::default()
             };
-            assert_eq!(cpr_boundary(&csv_row), Some("START".to_string()));
+            assert_eq!(cpr_boundary(&csv_row), Some("START".to_owned()));
         }
     }
 
@@ -288,8 +288,8 @@ mod tests {
         #[test]
         fn is_true() {
             let csv_row = ActionCsvRow {
-                old_value: "Error-Triggered".to_string(),
-                score: "Action-Was-Performed".to_string(),
+                old_value: "Error-Triggered".to_owned(),
+                score: "Action-Was-Performed".to_owned(),
                 ..Default::default()
             };
             assert!(is_error_action_marker(&csv_row));
@@ -298,8 +298,8 @@ mod tests {
         #[test]
         fn is_false_wrong_old_value() {
             let csv_row = ActionCsvRow {
-                old_value: "Not-Error".to_string(),
-                score: "Action-Was-Performed".to_string(),
+                old_value: "Not-Error".to_owned(),
+                score: "Action-Was-Performed".to_owned(),
                 ..Default::default()
             };
             assert!(!is_error_action_marker(&csv_row));
@@ -308,8 +308,8 @@ mod tests {
         #[test]
         fn is_false_wrong_score() {
             let csv_row = ActionCsvRow {
-                old_value: "Error-Triggered".to_string(),
-                score: "Not-Performed".to_string(),
+                old_value: "Error-Triggered".to_owned(),
+                score: "Not-Performed".to_owned(),
                 ..Default::default()
             };
             assert!(!is_error_action_marker(&csv_row));
@@ -318,8 +318,8 @@ mod tests {
         #[test]
         fn is_false_both_wrong() {
             let csv_row = ActionCsvRow {
-                old_value: "Not-Error".to_string(),
-                score: "Not-Performed".to_string(),
+                old_value: "Not-Error".to_owned(),
+                score: "Not-Performed".to_owned(),
                 ..Default::default()
             };
             assert!(!is_error_action_marker(&csv_row));
@@ -328,8 +328,8 @@ mod tests {
         #[test]
         fn is_false_empty_values() {
             let csv_row = ActionCsvRow {
-                old_value: "".to_string(),
-                score: "".to_string(),
+                old_value: "".to_owned(),
+                score: "".to_owned(),
                 ..Default::default()
             };
             assert!(!is_error_action_marker(&csv_row));
@@ -343,8 +343,8 @@ mod tests {
         #[test]
         fn is_true() {
             let csv_row = ActionCsvRow {
-                old_value: "Error-Triggered".to_string(),
-                score: "Action-Was-Not-Performed".to_string(),
+                old_value: "Error-Triggered".to_owned(),
+                score: "Action-Was-Not-Performed".to_owned(),
                 ..Default::default()
             };
             assert!(is_missed_action(&csv_row));
@@ -353,8 +353,8 @@ mod tests {
         #[test]
         fn is_false_wrong_old_value() {
             let csv_row = ActionCsvRow {
-                old_value: "Not-Error".to_string(),
-                score: "Action-Was-Not-Performed".to_string(),
+                old_value: "Not-Error".to_owned(),
+                score: "Action-Was-Not-Performed".to_owned(),
                 ..Default::default()
             };
             assert!(!is_missed_action(&csv_row));
@@ -363,8 +363,8 @@ mod tests {
         #[test]
         fn is_false_wrong_score() {
             let csv_row = ActionCsvRow {
-                old_value: "Error-Triggered".to_string(),
-                score: "Not-Performed".to_string(),
+                old_value: "Error-Triggered".to_owned(),
+                score: "Not-Performed".to_owned(),
                 ..Default::default()
             };
             assert!(!is_missed_action(&csv_row));
@@ -373,8 +373,8 @@ mod tests {
         #[test]
         fn is_false_both_wrong() {
             let csv_row = ActionCsvRow {
-                old_value: "Not-Error".to_string(),
-                score: "Not-Performed".to_string(),
+                old_value: "Not-Error".to_owned(),
+                score: "Not-Performed".to_owned(),
                 ..Default::default()
             };
             assert!(!is_missed_action(&csv_row));
@@ -383,8 +383,8 @@ mod tests {
         #[test]
         fn is_false_empty_values() {
             let csv_row = ActionCsvRow {
-                old_value: "".to_string(),
-                score: "".to_string(),
+                old_value: "".to_owned(),
+                score: "".to_owned(),
                 ..Default::default()
             };
             assert!(!is_missed_action(&csv_row));
@@ -401,18 +401,18 @@ mod tests {
             let expected_plot_location = PlotLocation {
                 timestamp: CsvRowTime {
                     total_seconds: 3600,
-                    date_string: "2024-12-24 01:00:00".to_string(),
-                    timestamp: "01:00:00".to_string(),
+                    date_string: "2024-12-24 01:00:00".to_owned(),
+                    timestamp: "01:00:00".to_owned(),
                 },
-                stage: (1,"Stage 1".to_string())
+                stage: (1,"Stage 1".to_owned())
             };
-            
+
             let csv_row = ActionCsvRow {
                 timestamp: Some(expected_plot_location.timestamp),
                 parsed_stage: Some(expected_plot_location.stage),
                 ..Default::default()
             };
-            
+
             assert_eq!(None, check_cpr(&csv_row));
         }
         #[test]
@@ -420,20 +420,20 @@ mod tests {
             let expected_plot_location = PlotLocation {
                 timestamp: CsvRowTime {
                     total_seconds: 3600,
-                    date_string: "2024-12-24 01:00:00".to_string(),
-                    timestamp: "01:00:00".to_string(),
+                    date_string: "2024-12-24 01:00:00".to_owned(),
+                    timestamp: "01:00:00".to_owned(),
                 },
-                stage: (1,"Stage 1".to_string())
+                stage: (1,"Stage 1".to_owned())
             };
             let expected = Some((String::from("START"), expected_plot_location.clone()));
-           
+
             let csv_row = ActionCsvRow {
                 timestamp: Some(expected_plot_location.timestamp),
                 parsed_stage: Some(expected_plot_location.stage),
-                cpr_boundary: Some("START".to_string()),
+                cpr_boundary: Some("START".to_owned()),
                 ..Default::default()
             };
-            
+
             assert_eq!(expected, check_cpr(&csv_row));
         }
 
@@ -442,10 +442,10 @@ mod tests {
             let expected_plot_location = PlotLocation {
                 timestamp: CsvRowTime {
                     total_seconds: 3600,
-                    date_string: "2024-12-24 01:00:00".to_string(),
-                    timestamp: "01:00:00".to_string(),
+                    date_string: "2024-12-24 01:00:00".to_owned(),
+                    timestamp: "01:00:00".to_owned(),
                 },
-                stage: (1,"Stage 1".to_string())
+                stage: (1,"Stage 1".to_owned())
             };
             let expected = Some((String::from("END"), expected_plot_location.clone()));
 
@@ -455,7 +455,7 @@ mod tests {
                 cpr_boundary: Some("END".to_owned()),
                 ..Default::default()
             };
-            
+
             assert_eq!(expected, check_cpr(&csv_row));
         }
     }
@@ -471,16 +471,16 @@ mod tests {
             let csv_row1 = ActionCsvRow {
                 timestamp: Some(CsvRowTime {
                     total_seconds: time,
-                    date_string: "2024-12-24 01:00:00".to_string(),
-                    timestamp: "01:00:00".to_string(),
+                    date_string: "2024-12-24 01:00:00".to_owned(),
+                    timestamp: "01:00:00".to_owned(),
                 }),
                 ..Default::default()
             };
             let csv_row2 = ActionCsvRow {
                 timestamp: Some(CsvRowTime {
                     total_seconds: time + ERROR_MARKER_TIME_THRESHOLD,
-                    date_string: "2024-12-24 01:00:02".to_string(),
-                    timestamp: "01:00:02".to_string(),
+                    date_string: "2024-12-24 01:00:02".to_owned(),
+                    timestamp: "01:00:02".to_owned(),
                 }),
                 ..Default::default()
             };
@@ -493,16 +493,16 @@ mod tests {
             let csv_row1 = ActionCsvRow {
                 timestamp: Some(CsvRowTime {
                     total_seconds: 3600,
-                    date_string: "2024-12-24 01:00:00".to_string(),
-                    timestamp: "01:00:00".to_string(),
+                    date_string: "2024-12-24 01:00:00".to_owned(),
+                    timestamp: "01:00:00".to_owned(),
                 }),
                 ..Default::default()
             };
             let csv_row2 = ActionCsvRow {
                 timestamp: Some(CsvRowTime {
                     total_seconds: time - ERROR_MARKER_TIME_THRESHOLD,
-                    date_string: "2024-12-24 01:00:02".to_string(),
-                    timestamp: "01:00:02".to_string(),
+                    date_string: "2024-12-24 01:00:02".to_owned(),
+                    timestamp: "01:00:02".to_owned(),
                 }),
                 ..Default::default()
             };
@@ -515,16 +515,16 @@ mod tests {
             let csv_row1 = ActionCsvRow {
                 timestamp: Some(CsvRowTime {
                     total_seconds: time,
-                    date_string: "2024-12-24 01:00:00".to_string(),
-                    timestamp: "01:00:00".to_string(),
+                    date_string: "2024-12-24 01:00:00".to_owned(),
+                    timestamp: "01:00:00".to_owned(),
                 }),
                 ..Default::default()
             };
             let csv_row2 = ActionCsvRow {
                 timestamp: Some(CsvRowTime {
                     total_seconds: time + ERROR_MARKER_TIME_THRESHOLD + 1,
-                    date_string: "2024-12-24 01:00:03".to_string(),
-                    timestamp: "01:00:03".to_string(),
+                    date_string: "2024-12-24 01:00:03".to_owned(),
+                    timestamp: "01:00:03".to_owned(),
                 }),
                 ..Default::default()
             };
@@ -537,16 +537,16 @@ mod tests {
             let csv_row1 = ActionCsvRow {
                 timestamp: Some(CsvRowTime {
                     total_seconds: time,
-                    date_string: "2024-12-24 01:00:00".to_string(),
-                    timestamp: "01:00:00".to_string(),
+                    date_string: "2024-12-24 01:00:00".to_owned(),
+                    timestamp: "01:00:00".to_owned(),
                 }),
                 ..Default::default()
             };
             let csv_row2 = ActionCsvRow {
                 timestamp: Some(CsvRowTime {
                     total_seconds: time - ERROR_MARKER_TIME_THRESHOLD - 1,
-                    date_string: "2024-12-24 01:00:03".to_string(),
-                    timestamp: "01:00:03".to_string(),
+                    date_string: "2024-12-24 01:00:03".to_owned(),
+                    timestamp: "01:00:03".to_owned(),
                 }),
                 ..Default::default()
             };
@@ -562,8 +562,8 @@ mod tests {
             let csv_row2 = ActionCsvRow {
                 timestamp: Some(CsvRowTime {
                     total_seconds: 3600,
-                    date_string: "2024-12-24 01:00:00".to_string(),
-                    timestamp: "01:00:00".to_string(),
+                    date_string: "2024-12-24 01:00:00".to_owned(),
+                    timestamp: "01:00:00".to_owned(),
                 }),
                 ..Default::default()
             };
@@ -593,11 +593,11 @@ mod tests {
 
             let csv_row = ActionCsvRow {
                 action_point: true,
-                action_vital_name: "User1".to_string(),
+                action_vital_name: "User1".to_owned(),
                 timestamp: Some(CsvRowTime {
                     total_seconds: time,
-                    date_string: "2024-12-24 01:00:00".to_string(),
-                    timestamp: "01:00:00".to_string(),
+                    date_string: "2024-12-24 01:00:00".to_owned(),
+                    timestamp: "01:00:00".to_owned(),
                 }),
                 ..Default::default()
             };
@@ -609,15 +609,15 @@ mod tests {
             let time = 3600;
             let (time, csv_row) = create_csv_row(time);
             let error_marker_row = ActionCsvRow {
-                username: "User1".to_string(),
+                username: "User1".to_owned(),
                 timestamp: Some(CsvRowTime {
                     total_seconds: time-ERROR_MARKER_TIME_THRESHOLD,
-                    date_string: "2024-12-24 01:00:02".to_string(),
-                    timestamp: "01:00:02".to_string(),
+                    date_string: "2024-12-24 01:00:02".to_owned(),
+                    timestamp: "01:00:02".to_owned(),
                 }),
                 ..Default::default()
             };
-            
+
             assert!(is_erroneous_action(&csv_row, &error_marker_row));
         }
 
@@ -626,20 +626,20 @@ mod tests {
             let time = 3600;
             let csv_row = ActionCsvRow {
                 action_point: true,
-                action_vital_name: "X".to_string(),
+                action_vital_name: "X".to_owned(),
                 timestamp: Some(CsvRowTime {
                     total_seconds: time,
-                    date_string: "2024-12-24 01:00:00".to_string(),
-                    timestamp: "01:00:00".to_string(),
+                    date_string: "2024-12-24 01:00:00".to_owned(),
+                    timestamp: "01:00:00".to_owned(),
                 }),
                 ..Default::default()
             };
             let error_marker_row = ActionCsvRow {
-                username: "(1)Stage A(action)".to_string(),
+                username: "(1)Stage A(action)".to_owned(),
                 timestamp: Some(CsvRowTime {
                     total_seconds: time+ERROR_MARKER_TIME_THRESHOLD,
-                    date_string: "2024-12-24 01:00:02".to_string(),
-                    timestamp: "01:00:02".to_string(),
+                    date_string: "2024-12-24 01:00:02".to_owned(),
+                    timestamp: "01:00:02".to_owned(),
                 }),
                 ..Default::default()
             };
@@ -651,11 +651,11 @@ mod tests {
             let time = 3600;
             let (time, csv_row) = create_csv_row(time);
             let error_marker_row = ActionCsvRow {
-                username: "User1".to_string(),
+                username: "User1".to_owned(),
                 timestamp: Some(CsvRowTime {
                     total_seconds: time+ERROR_MARKER_TIME_THRESHOLD+1,
-                    date_string: "2024-12-24 01:00:05".to_string(),
-                    timestamp: "01:00:05".to_string(),
+                    date_string: "2024-12-24 01:00:05".to_owned(),
+                    timestamp: "01:00:05".to_owned(),
                 }),
                 ..Default::default()
             };
@@ -667,11 +667,11 @@ mod tests {
             let time = 3600;
             let (time, csv_row) = create_csv_row(time);
             let error_marker_row = ActionCsvRow {
-                username: "User1".to_string(),
+                username: "User1".to_owned(),
                 timestamp: Some(CsvRowTime {
                     total_seconds: time-ERROR_MARKER_TIME_THRESHOLD-1,
-                    date_string: "2024-12-24 01:00:05".to_string(),
-                    timestamp: "01:00:05".to_string(),
+                    date_string: "2024-12-24 01:00:05".to_owned(),
+                    timestamp: "01:00:05".to_owned(),
                 }),
                 ..Default::default()
             };
@@ -683,20 +683,20 @@ mod tests {
             let time = 3600;
             let csv_row = ActionCsvRow {
                 action_point: false,
-                action_vital_name: "User1".to_string(),
+                action_vital_name: "User1".to_owned(),
                 timestamp: Some(CsvRowTime {
                     total_seconds: time,
-                    date_string: "2024-12-24 01:00:00".to_string(),
-                    timestamp: "01:00:00".to_string(),
+                    date_string: "2024-12-24 01:00:00".to_owned(),
+                    timestamp: "01:00:00".to_owned(),
                 }),
                 ..Default::default()
             };
             let error_marker_row = ActionCsvRow {
-                username: "User1".to_string(),
+                username: "User1".to_owned(),
                 timestamp: Some(CsvRowTime {
                     total_seconds: time+ERROR_MARKER_TIME_THRESHOLD-1,
-                    date_string: "2024-12-24 01:00:02".to_string(),
-                    timestamp: "01:00:02".to_string(),
+                    date_string: "2024-12-24 01:00:02".to_owned(),
+                    timestamp: "01:00:02".to_owned(),
                 }),
                 ..Default::default()
             };

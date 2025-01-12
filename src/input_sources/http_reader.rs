@@ -41,7 +41,7 @@ mod tests {
     fn test_create_http_reader_success() -> Result<(), Box<dyn std::error::Error>> {
         let mut server = Server::new(); // Start a mock server
 
-        let body = "col1,col2\nval1,val2\n".to_string();
+        let body = "col1,col2\nval1,val2\n".to_owned();
 
         let mock = server.mock("GET", "/data.csv")
             .with_status(200)

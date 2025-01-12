@@ -204,7 +204,7 @@ mod tests {
         fn test_read_invalid_headers() {
             let mut csv_reader = Reader::from_reader(ValidReader);
             let mock_validate = |_: &[&str], _: &[&str]| -> Result<(), String> {
-                Err("Validation error".to_string())
+                Err("Validation error".to_owned())
             };
 
             let result = apply_validation(&mut csv_reader, mock_validate);
