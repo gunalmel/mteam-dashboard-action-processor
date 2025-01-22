@@ -5,7 +5,7 @@ use crate::plot_structures::{CsvRowTime, PlotLocation};
 
 const CPR_START_MARKERS: [&'static str; 2] = ["begin cpr", "enter cpr"];
 const CPR_END_MARKERS: [&'static str; 2]  = ["stop cpr", "end cpr"];
-pub const ERROR_MARKER_TIME_THRESHOLD: u32 = 2;
+const ERROR_MARKER_TIME_THRESHOLD: u32 = 2;
 
 pub fn is_action_row(csv_row: &ActionCsvRow) -> bool {
     csv_row.parsed_stage.is_some() &&

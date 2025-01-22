@@ -37,19 +37,19 @@ fn display_menu() -> String {
 }
 fn process_csv_input(csv_iterator: Box<dyn Iterator<Item=Result<ActionPlotPoint, String>>>) {
     for (row_idx, result) in csv_iterator.enumerate() {
-        let item_number = row_idx + 1;
+        let _item_number = row_idx + 1;
         match result {
             // Ok(_)=> { print_debug_message!("{}", item_number); },
-            Ok(ActionPlotPoint::Error(error_point)) => {
-                print_debug_message!("{} Error: {:#?}", item_number, error_point);
+            Ok(ActionPlotPoint::Error(_error_point)) => {
+                print_debug_message!("{} Error: {:#?}", _item_number, _error_point);
             }
-            Ok(ActionPlotPoint::Action(action_point)) => {
-                print_debug_message!("{} Action: {:#?}", item_number, action_point);
-            },
+            Ok(ActionPlotPoint::Action(_action_point)) => {
+                print_debug_message!("{} Action: {:#?}", _item_number, _action_point);
+            }
             // Ok(ActionPlotPoint::Period(PeriodType::Stage, start, end)) => { print_debug_message!("{} stage_boundary: {:#?}", item_number, (start,end)); },
             // Ok(ActionPlotPoint::MissedAction(missed_action)) => { print_debug_message!("{} missed_action: {:?}", item_number, missed_action); },
             // Ok(ActionPlotPoint::Period(PeriodType::CPR, start, end)) => { print_debug_message!("{} stage_boundary: {:#?}", item_number, (start,end)); },
-            Err(e) => { print_debug_message!("{} error: {}", item_number, e); },
+            Err(_e) => { print_debug_message!("{} error: {}", _item_number, _e); }
             _ => {}
         }
     }
